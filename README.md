@@ -24,3 +24,20 @@
 `.env.example`을 참고해 로컬 `.env`를 작성합니다. 영상과 모델은 별도로 공유합니다.
 
 요구사항과 규격은 docs/, 협업 규칙은 CONTRIBUTING.md를 참고하세요.
+
+## 개발 환경 설치
+
+Anaconda 또는 Miniconda 터미널에서 프로젝트 폴더로 이동한 뒤 실행합니다.
+이미 `parking311` 환경이 있으면 생성 명령을 생략하세요.
+
+```bash
+conda create -n parking311 python=3.11 -y
+conda activate parking311
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python --version
+python -m pip list
+```
+
+패키지 목록은 `requirements.txt`에서 관리하며 버전은 아직 고정하지 않았습니다.
+Python 3.11과 Conda 환경 생성은 위 명령으로 별도 설정합니다.
