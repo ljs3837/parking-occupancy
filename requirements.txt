@@ -1,0 +1,13 @@
+ultralytics
+opencv-python
+numpy
+pandas
+matplotlib
+pillow
+scikit-learn
+scipy
+streamlit
+plotly
+supervision
+pyyaml
+tqdm
