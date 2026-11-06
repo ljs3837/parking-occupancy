@@ -1,0 +1,6 @@
+# Example only. Replace with local video paths; do not commit credentials.
+cameras:
+  - camera_id: CAM_01
+    source: data/cam01.mp4
+  - camera_id: CAM_02
+    source: data/cam02.mp4

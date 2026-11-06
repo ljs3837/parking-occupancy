@@ -1,0 +1,8 @@
+# Unset values require agreement and calibration before execution.
+occupancy:
+  occupied_min_seconds: null
+  vacant_min_seconds: null
+  confidence_threshold: null
+  stale_after_seconds: null
+  initial_state: unknown
+  hold_on_occlusion: true

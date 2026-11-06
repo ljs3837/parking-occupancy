@@ -1,0 +1,10 @@
+# Pixel polygons must be defined for each actual video before use.
+mappings:
+  - camera_id: CAM_01
+    region_id: A
+    space_id: SPACE_001
+    polygon: []
+  - camera_id: CAM_02
+    region_id: C
+    space_id: SPACE_001
+    polygon: []
