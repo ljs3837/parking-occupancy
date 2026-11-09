@@ -25,6 +25,15 @@
 
 요구사항과 규격은 docs/, 협업 규칙은 CONTRIBUTING.md를 참고하세요.
 
+## 앱 실행
+
+```bash
+conda activate parking
+python src/main.py
+```
+
+PyQt6 통합 앱입니다. 색인·(예정)관제·학습을 한 실행 파일에서 엽니다.
+
 ## 개발 환경 설치
 
 Anaconda 또는 Miniconda 터미널에서 프로젝트 폴더로 이동한 뒤 실행합니다.

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parking Annotator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>Parking Annotator</h1>
+            <span>다각형 주차면 색인</span>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="modeDraw" class="btn active" type="button">그리기 <span class="kbd">D</span></button>
+          <button id="modeSelect" class="btn" type="button">선택/이동 <span class="kbd">V</span></button>
+          <button id="btnClose" class="btn" type="button">폴리곤 닫기 <span class="kbd">Enter</span></button>
+          <button id="btnCopy" class="btn" type="button">복사 <span class="kbd">Ctrl+C</span></button>
+          <button id="btnPaste" class="btn" type="button">붙여넣기 <span class="kbd">Ctrl+V</span></button>
+          <button id="btnDelete" class="btn" type="button">삭제 <span class="kbd">Del</span></button>
+          <button id="btnFit" class="btn ghost" type="button">맞춤</button>
+          <button id="btnSave" class="btn primary" type="button">저장 <span class="kbd">Ctrl+S</span></button>
+        </div>
+
+        <div id="saveStatus" class="status-pill">대기</div>
+      </header>
+
+      <div class="main">
+        <section class="stage">
+          <div class="stage-meta">
+            <div id="currentPath" class="path">이미지를 선택하세요</div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="stageCanvas"></canvas>
+            <div id="emptyState" class="empty-state">
+              <div>
+                <strong>왼쪽에서 색인 · 오른쪽에서 파일</strong>
+                클릭으로 꼭짓점 추가 → Enter/더블클릭으로 닫기<br />
+                같은 칸 모양은 복사 후 붙여넣기로 복제
+              </div>
+            </div>
+          </div>
+          <div class="hint-bar">
+            <span><b>휠</b> 줌</span>
+            <span><b>Alt+드래그</b> 패닝</span>
+            <span><b>Shift+클릭</b> 선택</span>
+            <span>청록=점유 · 주황=빈칸</span>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <div class="side-block">
+            <h2>파일</h2>
+            <input id="search" class="search" type="search" placeholder="경로 검색 (예: data_0, pucpr)" />
+            <div class="file-stats"><span>표시</span><span id="fileStats">0 / 0</span></div>
+          </div>
+
+          <div class="file-list" id="fileList"></div>
+
+          <div class="inspector">
+            <h2>선택 폴리곤</h2>
+            <div id="polyList" class="poly-list"></div>
+
+            <div class="tag-row">
+              <button class="tag" type="button" data-occ="occupied">occupied</button>
+              <button class="tag" type="button" data-occ="empty">empty</button>
+              <button class="tag" type="button" data-occ="unknown">unknown</button>
+            </div>
+
+            <div id="currentTags" class="tag-row"></div>
+
+            <div class="tag-input-row">
+              <input id="customTag" type="text" placeholder="커스텀 태그 추가" />
+              <button id="btnAddTag" class="btn" type="button">추가</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
