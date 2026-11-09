@@ -11,7 +11,6 @@ fo.config.default_dataset_dir = str(DATA_DIR)
 # 테스트용: 전체(~4GB) 대신 일부만
 dataset = load_from_hub(
     "Voxel51/PKLot",
-    max_samples=100,
     overwrite=True,
 )
 
