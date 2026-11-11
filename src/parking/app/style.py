@@ -38,15 +38,16 @@ QPushButton#navBtn[active="true"] {
   border-color: rgba(46, 196, 182, 0.35);
   color: #b8fff7;
 }
-QLineEdit, QComboBox, QListWidget, QSpinBox, QTextEdit {
+QLineEdit, QComboBox, QListWidget, QTreeView, QSpinBox, QTextEdit {
   background: #141a22;
   border: 1px solid #2a3545;
   border-radius: 8px;
   padding: 6px;
   color: #e7eef7;
 }
-QListWidget::item:selected {
+QListWidget::item:selected, QTreeView::item:selected {
   background: rgba(46, 196, 182, 0.22);
+  color: #e7eef7;
 }
 QStatusBar {
   background: #141a22;
@@ -71,6 +72,33 @@ QFrame#navRail {
 QSplitter::handle {
   background: #2a3545;
   width: 2px;
+}
+QScrollBar:horizontal {
+  height: 12px;
+  background: #10161e;
+  margin: 0;
+}
+QScrollBar:vertical {
+  width: 12px;
+  background: #10161e;
+  margin: 0;
+}
+QScrollBar::handle:horizontal {
+  background: #3d4d63;
+  border-radius: 4px;
+  min-width: 24px;
+}
+QScrollBar::handle:vertical {
+  background: #3d4d63;
+  border-radius: 4px;
+  min-height: 24px;
+}
+QScrollBar::handle:horizontal:hover, QScrollBar::handle:vertical:hover {
+  background: #2ec4b6;
+}
+QScrollBar::add-line, QScrollBar::sub-line {
+  width: 0;
+  height: 0;
 }
 QFrame#heroCard {
   background: #141a22;

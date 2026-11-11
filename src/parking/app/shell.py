@@ -5,8 +5,9 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -15,9 +16,10 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator import AnnotatorPage
 from parking.app.pages.home import HomePage
-from parking.app.pages.placeholder import PlaceholderPage
+from parking.app.pages.monitor import DETECTOR, MonitorPage
 from parking.app.pages.train import TrainPage
 from parking.app.style import APP_STYLE
+from parking.perception.live import list_models
 
 
 class AppShell(QMainWindow):
@@ -35,7 +37,7 @@ class AppShell(QMainWindow):
 
         nav = QFrame()
         nav.setObjectName("navRail")
-        nav.setFixedWidth(220)
+        nav.setFixedWidth(230)
         nav_layout = QVBoxLayout(nav)
         nav_layout.setContentsMargins(14, 18, 14, 18)
         nav_layout.setSpacing(8)
@@ -56,10 +58,8 @@ class AppShell(QMainWindow):
         self.annotator = AnnotatorPage()
         self.annotator.status_message.connect(self._set_status)
 
-        self.monitor = PlaceholderPage(
-            "관제",
-            "실시간 점유·빈자리 현황 화면은 이후 이 메뉴에 붙입니다.",
-        )
+        self.monitor = MonitorPage()
+        self.monitor.status_message.connect(self._set_status)
         self.train = TrainPage()
         self.train.status_message.connect(self._set_status)
 
@@ -80,17 +80,49 @@ class AppShell(QMainWindow):
             nav_layout.addWidget(btn)
 
         nav_layout.addStretch(1)
-        hint = QLabel("실행: python src/main.py")
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#5f6f84;font-size:11px;")
-        nav_layout.addWidget(hint)
+        model_title = QLabel("모델")
+        model_title.setObjectName("brandSub")
+        nav_layout.addWidget(model_title)
+        refresh_models = QPushButton("새로고침")
+        refresh_models.clicked.connect(self.refresh_models)
+        nav_layout.addWidget(refresh_models)
+        self.model_list = QListWidget()
+        self.model_list.setMinimumHeight(140)
+        self.model_list.itemClicked.connect(self.select_model)
+        nav_layout.addWidget(self.model_list)
 
         layout.addWidget(nav)
         layout.addWidget(self.stack, 1)
 
         self.status = self.statusBar()
         self.status.showMessage("준비")
+        self.refresh_models()
         self.goto("home")
+
+    def refresh_models(self):
+        current = self.model_list.currentItem()
+        current_label = current.text() if current else ""
+        self.model_list.clear()
+        models = list_models()
+        chosen = 0
+        for index, model in enumerate(models):
+            item = QListWidgetItem(model["label"])
+            item.setData(Qt.ItemDataRole.UserRole, model)
+            item.setToolTip(model["path"])
+            self.model_list.addItem(item)
+            if model["label"] == current_label or (not current_label and model["kind"] == "occupancy"):
+                chosen = index
+        if self.model_list.count():
+            self.model_list.setCurrentRow(chosen)
+            self.select_model(self.model_list.item(chosen))
+
+    def select_model(self, item: QListWidgetItem):
+        model = item.data(Qt.ItemDataRole.UserRole)
+        DETECTOR.use(model["kind"], model["path"], model["label"])
+        if model["kind"] == "cnn":
+            self.status.showMessage("CNN은 잘라 둔 칸의 점유만 분류합니다. 칸 위치는 YOLO 분할 모델을 학습해야 합니다.")
+        else:
+            self.status.showMessage(f"모델 선택: {model['label']}")
 
     def _set_status(self, msg: str):
         self.status.showMessage(msg)
@@ -99,6 +131,8 @@ class AppShell(QMainWindow):
         if key != "annotate" and self.stack.currentWidget() is self.annotator:
             if not self.annotator.confirm_leave():
                 return
+        if key != "monitor" and self.stack.currentWidget() is self.monitor:
+            self.monitor.pause_all()
 
         page = self.pages[key]
         self.stack.setCurrentWidget(page)
@@ -119,4 +153,5 @@ class AppShell(QMainWindow):
         if self.stack.currentWidget() is self.annotator and not self.annotator.confirm_leave():
             event.ignore()
             return
+        self.monitor.stop_all()
         event.accept()

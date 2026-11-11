@@ -14,6 +14,8 @@ dist/
 # Large/local artifacts
 /data/*
 !/data/README.md
+!/data/cctv/
+!/data/cctv/.gitkeep
 /models/*
 !/models/README.md
 /outputs/*

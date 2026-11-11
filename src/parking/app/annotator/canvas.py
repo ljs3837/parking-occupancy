@@ -32,6 +32,7 @@ class Canvas(QWidget):
         self.draft: list[QPointF] = []
         self.mode = "draw"
         self.draw_label = "parking_space"
+        self.draw_status = "not occupied"
         self.clipboard: dict | None = None
         self.scale = 1.0
         self.offset = QPointF(0, 0)
@@ -183,12 +184,21 @@ class Canvas(QWidget):
         if len(self.draft) < 3:
             return False
         self._record_undo()
-        is_occlusion = self.draw_label == "occlusion"
+        is_occlusion = self.draw_label == "occlusion" or self.draw_status == "occlusion"
+        if is_occlusion:
+            tags = ["occlusion"]
+            label = "occlusion"
+        elif self.draw_status == "occupied":
+            tags = ["occupied"]
+            label = "parking_space"
+        else:
+            tags = ["empty"]
+            label = "parking_space"
         poly = {
             "id": f"p_{uuid.uuid4().hex[:8]}",
             "points": [self.clamp01(p) for p in self.draft],
-            "tags": ["occlusion"] if is_occlusion else ["empty"],
-            "label": self.draw_label,
+            "tags": tags,
+            "label": label,
         }
         self.polygons.append(poly)
         self.selected_id = poly["id"]

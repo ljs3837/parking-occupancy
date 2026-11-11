@@ -2,17 +2,58 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QKeySequence, QShortcut
+from PyQt6.QtCore import QDir, QSortFilterProxyModel, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFileSystemModel, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QComboBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QSplitter, QToolBar,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSizePolicy, QSplitter, QToolBar,
+    QTreeView, QVBoxLayout, QWidget,
 )
 
 from parking.app.annotator.canvas import Canvas
-from parking.app.annotator.io import annot_path, list_images, load_annotation, occupancy_of, save_annotation
-from parking.app.paths import ANNOT_DIR, DATA_DIR
+from parking.app.annotator.io import annot_path, load_annotation, occupancy_of, save_annotation
+from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
+
+
+class _AnnotatedFsModel(QFileSystemModel):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.ForegroundRole and index.column() == 0 and not self.isDir(index):
+            path = Path(self.filePath(index))
+            if path.suffix.lower() in IMAGE_EXTS:
+                try:
+                    rel = path.resolve().relative_to(DATA_DIR.resolve())
+                except (OSError, ValueError):
+                    rel = None
+                if rel is not None and annot_path(rel).exists():
+                    return QColor("#2ec4b6")
+        return super().data(index, role)
+
+
+class _NameFilterProxy(QSortFilterProxyModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.query = ""
+        self.setRecursiveFilteringEnabled(True)
+
+    def filterAcceptsRow(self, source_row: int, source_parent) -> bool:
+        if not self.query:
+            return True
+        model = self.sourceModel()
+        index = model.index(source_row, 0, source_parent)
+        if not index.isValid() or model.isDir(index):
+            return True
+        return self.query in model.fileName(index).lower()
+
+
+class _DataTreeView(QTreeView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._on_resize = None
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._on_resize is not None:
+            self._on_resize()
 
 
 class AnnotatorPage(QWidget):
@@ -21,7 +62,6 @@ class AnnotatorPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         ANNOT_DIR.mkdir(parents=True, exist_ok=True)
-        self.all_files = list_images()
         self.current_path: str | None = None
         self.canvas = Canvas()
         self.canvas.changed.connect(self._on_canvas_changed)
@@ -37,12 +77,12 @@ class AnnotatorPage(QWidget):
         self.mode_box.currentIndexChanged.connect(self._mode_changed)
         self.toolbar.addWidget(self.mode_box)
         self.target_box = QComboBox()
-        self.target_box.addItems(["주차면", "가림 영역"])
+        self.target_box.addItems(["차 없는 칸", "차 있는 칸", "가림"])
         self.target_box.currentIndexChanged.connect(self._target_changed)
         self.toolbar.addWidget(self.target_box)
         for text, slot in [
             ("폴리곤 닫기", self.canvas.close_draft), ("복사", self._copy),
-            ("붙여넣기", self._paste), ("삭제", self.canvas.delete_selected),
+            ("붙여넣기", self._paste), ("색인 삭제", self._delete_selected_polygon),
             ("맞춤", self.canvas.fit), ("저장", self.save_current),
             ("실행 취소", self._undo), ("다시 실행", self._redo),
         ]:
@@ -53,29 +93,66 @@ class AnnotatorPage(QWidget):
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(12, 12, 12, 12)
         side_layout.setSpacing(8)
-        side_layout.addWidget(QLabel("파일"))
+        side_layout.addWidget(QLabel("data"))
         self.search = QLineEdit()
-        self.search.setPlaceholderText("경로 검색")
+        self.search.setPlaceholderText("이름 검색")
         self.search.textChanged.connect(self._filter_files)
         side_layout.addWidget(self.search)
-        self.file_stats = QLabel()
+        self.file_stats = QLabel("data 폴더")
+        self.file_stats.setWordWrap(True)
         side_layout.addWidget(self.file_stats)
         self.dashboard_label = QLabel()
         self.dashboard_label.setWordWrap(True)
         self.dashboard_label.setStyleSheet("color:#dbe7f5;font-weight:600;padding:6px 0;")
         side_layout.addWidget(self.dashboard_label)
-        self.file_list = QListWidget()
-        self.file_list.itemClicked.connect(self._open_item)
-        side_layout.addWidget(self.file_list, 1)
+        self.fs_model = _AnnotatedFsModel(self)
+        self.fs_model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
+        root_index = self.fs_model.setRootPath(str(DATA_DIR))
+        self.file_proxy = _NameFilterProxy(self)
+        self.file_proxy.setSourceModel(self.fs_model)
+        self.file_tree = _DataTreeView()
+        self.file_tree.setModel(self.file_proxy)
+        self.file_tree.setUniformRowHeights(True)
+        self.file_tree.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.file_tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.file_tree.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.file_tree.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.file_tree.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.file_tree.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.file_tree.setMinimumWidth(0)
+        # 헤더를 숨기면 가로 스크롤 범위가 생기지 않는다. 높이를 0으로 둔다.
+        self.file_tree.setHeaderHidden(False)
+        header = self.file_tree.header()
+        header.setFixedHeight(0)
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        for col in (1, 2, 3):
+            self.file_tree.hideColumn(col)
+        self.file_tree.setRootIndex(self.file_proxy.mapFromSource(root_index))
+        self.file_tree.clicked.connect(self._open_tree_index)
+        self.file_tree.selectionModel().currentChanged.connect(self._on_tree_current_changed)
+        self._scroll_passes = 0
+        self._fitting_column = False
+        self.file_tree.expanded.connect(self._on_tree_expanded)
+        self.file_tree.collapsed.connect(self._schedule_fit_tree_column)
+        self._fit_timer = QTimer(self)
+        self._fit_timer.setSingleShot(True)
+        self._fit_timer.timeout.connect(self._fit_tree_column)
+        self.file_tree._on_resize = self._schedule_fit_tree_column
+        self.fs_model.directoryLoaded.connect(self._on_directory_loaded)
+        self.fs_model.directoryLoaded.connect(self._schedule_fit_tree_column)
+        side_layout.addWidget(self.file_tree, 1)
         side_layout.addWidget(QLabel("폴리곤"))
         self.poly_list = QListWidget()
         self.poly_list.itemClicked.connect(self._select_poly_item)
         side_layout.addWidget(self.poly_list)
-        side_layout.addWidget(QLabel("상태 단축키: 1 빈자리 / 2 점유 / 3 미정 / 4 가림"))
+        hint = QLabel("1 차 없음 / 2 차 있음 / Del 색인 삭제 / Ctrl+R 파일 삭제")
+        hint.setWordWrap(True)
+        side_layout.addWidget(hint)
         tag_row = QHBoxLayout()
-        for name, key in [("빈자리", "empty"), ("점유", "occupied"), ("미정", "unknown"), ("가림", "occlusion")]:
+        for name, key in [("차 없음", "empty"), ("차 있음", "occupied"), ("미정", "unknown"), ("가림", "occlusion")]:
             button = QPushButton(name)
-            button.clicked.connect(lambda _=False, k=key: self.canvas.set_occupancy(k))
+            button.clicked.connect(lambda _=False, k=key: self._use_status(k))
             tag_row.addWidget(button)
         side_layout.addLayout(tag_row)
         self.tag_label = QLabel("태그: -")
@@ -106,21 +183,37 @@ class AnnotatorPage(QWidget):
         QShortcut(QKeySequence("Return"), self, activated=self.canvas.close_draft)
         QShortcut(QKeySequence("Ctrl+C"), self, activated=self._copy)
         QShortcut(QKeySequence("Ctrl+V"), self, activated=self._paste)
-        QShortcut(QKeySequence("Delete"), self, activated=self.canvas.delete_selected)
+        for widget in (self.canvas, self.poly_list):
+            shortcut = QShortcut(QKeySequence(Qt.Key.Key_Delete), widget)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(self._delete_selected_polygon)
+        QShortcut(QKeySequence("Ctrl+R"), self, activated=self._delete_selected_file)
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self.save_current)
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
         QShortcut(QKeySequence("Ctrl+Y"), self, activated=self._redo)
-        QShortcut(QKeySequence("1"), self, activated=lambda: self.canvas.set_occupancy("empty"))
-        QShortcut(QKeySequence("2"), self, activated=lambda: self.canvas.set_occupancy("occupied"))
-        QShortcut(QKeySequence("3"), self, activated=lambda: self.canvas.set_occupancy("unknown"))
-        QShortcut(QKeySequence("4"), self, activated=lambda: self.canvas.set_occupancy("occlusion"))
+        QShortcut(QKeySequence("1"), self, activated=lambda: self._use_status("empty"))
+        QShortcut(QKeySequence("2"), self, activated=lambda: self._use_status("occupied"))
+        QShortcut(QKeySequence("3"), self, activated=lambda: self._use_status("unknown"))
+        QShortcut(QKeySequence("4"), self, activated=lambda: self._use_status("occlusion"))
         QShortcut(QKeySequence("Esc"), self, activated=self._cancel_draft)
 
     def _mode_changed(self, index: int):
         self.canvas.mode = "draw" if index == 0 else "select"
 
     def _target_changed(self, index: int):
-        self.canvas.draw_label = "parking_space" if index == 0 else "occlusion"
+        if index == 2:
+            self.canvas.draw_label = "occlusion"
+            self.canvas.draw_status = "occlusion"
+            return
+        self.canvas.draw_label = "parking_space"
+        self.canvas.draw_status = "occupied" if index == 1 else "not occupied"
+
+    def _use_status(self, tag: str):
+        index = {"empty": 0, "occupied": 1, "occlusion": 2}.get(tag)
+        if index is not None:
+            self.target_box.setCurrentIndex(index)
+            self._target_changed(index)
+        self.canvas.set_occupancy(tag)
 
     def _on_canvas_changed(self):
         self.status_message.emit("저장되지 않은 변경")
@@ -138,18 +231,174 @@ class AnnotatorPage(QWidget):
         self.canvas.draft.clear()
         self.canvas.update()
 
+    def _on_tree_expanded(self, _index):
+        self._scroll_passes = 1
+        self._schedule_fit_tree_column()
+
+    def _schedule_fit_tree_column(self, *_args):
+        self._fit_timer.start(40)
+
+    def _fit_tree_column(self):
+        view = self.file_tree
+        model = view.model()
+        if model is None or self._fitting_column:
+            return
+        self._fitting_column = True
+        try:
+            metrics = view.fontMetrics()
+            indent = max(view.indentation(), 1)
+            max_width = 0
+            index = model.index(0, 0, view.rootIndex())
+            seen = 0
+            while index.isValid() and seen < 2500:
+                text = model.data(index, Qt.ItemDataRole.DisplayRole)
+                depth = 1
+                parent = index.parent()
+                root = view.rootIndex()
+                while parent.isValid() and parent != root:
+                    depth += 1
+                    parent = parent.parent()
+                    if depth > 64:
+                        break
+                text_w = metrics.horizontalAdvance(text if isinstance(text, str) else "")
+                width = depth * indent + text_w + 56
+                if width > max_width:
+                    max_width = width
+                index = view.indexBelow(index)
+                seen += 1
+            target = max(max_width, view.viewport().width())
+            if view.columnWidth(0) != target:
+                view.setColumnWidth(0, target)
+            if self._scroll_passes and view.horizontalScrollBar().maximum() > 0:
+                self._scroll_passes = 0
+                view.horizontalScrollBar().setValue(view.horizontalScrollBar().maximum())
+        finally:
+            self._fitting_column = False
+
+    def _on_directory_loaded(self, path: str):
+        if self.file_tree.rootIndex().isValid():
+            return
+        if Path(path).resolve() != DATA_DIR.resolve():
+            return
+        root = self.fs_model.index(str(DATA_DIR))
+        if root.isValid():
+            self.file_tree.setRootIndex(self.file_proxy.mapFromSource(root))
+
     def _filter_files(self, query: str):
         query = (query or "").strip().lower()
-        self.file_list.clear()
-        matched = [p for p in self.all_files if not query or query in p.lower()]
-        for rel in matched[:800]:
-            item = QListWidgetItem(Path(rel).name)
-            item.setData(Qt.ItemDataRole.UserRole, rel)
-            item.setToolTip(rel)
-            if annot_path(Path(rel)).exists():
-                item.setForeground(QColor("#2ec4b6"))
-            self.file_list.addItem(item)
-        self.file_stats.setText(f"표시 {min(len(matched), 800)} / 전체 {len(matched)}")
+        self.file_proxy.query = query
+        self.file_proxy.invalidateFilter()
+        self.file_stats.setText("data 폴더" if not query else f"이름 검색: {query}")
+
+    def _on_tree_current_changed(self, current, _previous):
+        self._reveal_tree_index(current)
+        self._open_tree_index(current)
+
+    def _reveal_tree_index(self, proxy_index):
+        view = self.file_tree
+        if not proxy_index.isValid():
+            return
+        view.scrollTo(proxy_index, QAbstractItemView.ScrollHint.EnsureVisible)
+        rect = view.visualRect(proxy_index)
+        if not rect.isValid():
+            return
+        bar = view.horizontalScrollBar()
+        viewport_w = view.viewport().width()
+        if rect.right() > viewport_w:
+            bar.setValue(min(bar.maximum(), bar.value() + rect.right() - viewport_w + 12))
+        elif rect.left() < 0:
+            bar.setValue(max(0, bar.value() + rect.left() - 12))
+
+    def _open_tree_index(self, proxy_index):
+        if not proxy_index.isValid():
+            return
+        index = self.file_proxy.mapToSource(proxy_index)
+        if not index.isValid() or self.fs_model.isDir(index):
+            return
+        path = Path(self.fs_model.filePath(index))
+        if path.suffix.lower() not in IMAGE_EXTS:
+            return
+        try:
+            rel = path.resolve().relative_to(DATA_DIR.resolve()).as_posix()
+        except (OSError, ValueError):
+            return
+        self.open_image(rel)
+
+    def _image_rel(self, proxy_index) -> str | None:
+        source = self.file_proxy.mapToSource(proxy_index)
+        if not source.isValid() or self.fs_model.isDir(source):
+            return None
+        path = Path(self.fs_model.filePath(source))
+        if path.suffix.lower() not in IMAGE_EXTS:
+            return None
+        try:
+            return path.resolve().relative_to(DATA_DIR.resolve()).as_posix()
+        except (OSError, ValueError):
+            return None
+
+    def _neighbor_image_rel(self, index, deleted: Path) -> str | None:
+        deleted_res = deleted.resolve()
+        for step in (self.file_tree.indexBelow, self.file_tree.indexAbove):
+            cursor = index
+            for _ in range(40):
+                cursor = step(cursor)
+                if not cursor.isValid():
+                    break
+                rel = self._image_rel(cursor)
+                if rel and (DATA_DIR / rel).resolve() != deleted_res:
+                    return rel
+        return None
+
+    def _delete_selected_polygon(self):
+        if not self.canvas.selected_id:
+            self.status_message.emit("선택된 색인이 없습니다")
+            return
+        self.canvas.delete_selected()
+        self.status_message.emit("색인 삭제")
+
+    def _delete_selected_file(self):
+        index = self.file_tree.currentIndex()
+        if not index.isValid():
+            self.status_message.emit("삭제할 이미지를 탐색기에서 선택하세요")
+            return
+        source = self.file_proxy.mapToSource(index)
+        if not source.isValid() or self.fs_model.isDir(source):
+            self.status_message.emit("폴더는 삭제할 수 없습니다")
+            return
+        path = Path(self.fs_model.filePath(source))
+        if not path.is_file() or path.suffix.lower() not in IMAGE_EXTS:
+            self.status_message.emit("이미지 파일만 삭제할 수 있습니다")
+            return
+        try:
+            rel = path.resolve().relative_to(DATA_DIR.resolve()).as_posix()
+        except (OSError, ValueError):
+            return
+        next_rel = self._neighbor_image_rel(index, path)
+        self.canvas._dirty = False
+        self.current_path = None
+        try:
+            path.unlink()
+        except OSError as exc:
+            self.status_message.emit(f"삭제 실패: {exc}")
+            return
+        ann = annot_path(Path(rel))
+        if ann.is_file():
+            try:
+                ann.unlink()
+            except OSError:
+                pass
+        self.status_message.emit(f"삭제됨: {rel}")
+        if next_rel:
+            try:
+                self.open_image(next_rel)
+            except Exception as exc:
+                self.status_message.emit(f"삭제됨: {rel} / 다음 이미지 열기 실패: {exc}")
+            return
+        self.canvas.image = None
+        self.canvas.polygons.clear()
+        self.canvas.selected_id = None
+        self.canvas.update()
+        self._refresh_inspector()
 
     def confirm_leave(self) -> bool:
         if not self.canvas.dirty:
@@ -157,10 +406,9 @@ class AnnotatorPage(QWidget):
         result = QMessageBox.question(self, "저장 확인", "저장하지 않은 변경이 있습니다. 이동할까요?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         return result == QMessageBox.StandardButton.Yes
 
-    def _open_item(self, item: QListWidgetItem):
-        self.open_image(item.data(Qt.ItemDataRole.UserRole))
-
     def open_image(self, rel: str):
+        if rel == self.current_path:
+            return
         if not self.confirm_leave():
             return
         self.canvas.load_image(DATA_DIR / rel, load_annotation(rel))
@@ -174,15 +422,18 @@ class AnnotatorPage(QWidget):
         save_annotation(self.current_path, self.canvas.export_polygons())
         self.canvas._dirty = False
         self.status_message.emit("data/annotations에 저장됨")
-        self._filter_files(self.search.text())
+        index = self.fs_model.index(str((DATA_DIR / self.current_path).resolve()))
+        if index.isValid():
+            self.fs_model.dataChanged.emit(index, index, [Qt.ItemDataRole.ForegroundRole])
 
     def _refresh_inspector(self):
         self.poly_list.clear()
         counts = {"empty": 0, "occupied": 0, "unknown": 0, "occlusion": 0}
         for index, polygon in enumerate(self.canvas.polygons):
             state = "occlusion" if polygon.get("label") == "occlusion" or "occlusion" in polygon.get("tags", []) else occupancy_of(polygon["tags"])
+            state_name = {"empty": "차 없음", "occupied": "차 있음", "unknown": "미정", "occlusion": "가림"}.get(state, state)
             counts[state] += 1
-            item = QListWidgetItem(f"#{index + 1}  {state}  ({len(polygon['points'])}개 꼭짓점)")
+            item = QListWidgetItem(f"#{index + 1}  {state_name}  ({len(polygon['points'])}개 꼭짓점)")
             item.setData(Qt.ItemDataRole.UserRole, polygon["id"])
             self.poly_list.addItem(item)
             if polygon["id"] == self.canvas.selected_id:
@@ -190,8 +441,8 @@ class AnnotatorPage(QWidget):
         polygon = self.canvas.selected()
         self.tag_label.setText("태그: " + (", ".join(polygon["tags"]) if polygon and polygon["tags"] else "-"))
         self.dashboard_label.setText(
-            f"주차 현황 | 전체 {sum(counts.values())} | 빈자리 {counts['empty']} | "
-            f"점유 {counts['occupied']} | 미정 {counts['unknown']} | 가림 {counts['occlusion']}"
+            f"주차 현황 | 전체 {sum(counts.values())} | 차 없음 {counts['empty']} | "
+            f"차 있음 {counts['occupied']} | 미정 {counts['unknown']} | 가림 {counts['occlusion']}"
         )
 
     def _select_poly_item(self, item: QListWidgetItem):

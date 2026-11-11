@@ -16,7 +16,7 @@ def train_yolo(
     batch: int = 8,
     max_images: int = 100,
     imgsz: int = 640,
-    model_name: str = "yolov8n.pt",
+    model_name: str = "yolov8n-seg.pt",
     log=print,
     should_stop=None,
 ) -> Path:
@@ -59,7 +59,9 @@ def train_yolo(
         raise RuntimeError(f"YOLO best.pt를 찾지 못했습니다: {best}")
 
     (OUT_DIR / "README.txt").write_text(
-        f"YOLO fine-tune ({model_name})\nbest: {dest}\nsource_run: {best}\n",
+        f"YOLO segmentation ({model_name})\n"
+        "labels: polygon empty/occupied\n"
+        f"best: {dest}\nsource_run: {best}\n",
         encoding="utf-8",
     )
     log("[YOLO] 완료")

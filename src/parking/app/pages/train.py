@@ -133,7 +133,7 @@ class TrainPage(QWidget):
 
         desc = QLabel(
             "주차칸 라벨(칸 좌표 + 점유여부)로 두 가지 모델을 학습합니다. "
-            "로컬 색인(`data/annotations`)이 있으면 우선 사용하고, 부족하면 PKLot를 사용합니다."
+            "우리 색인(`data/annotations`)과 PKLot `samples.json`을 함께 사용합니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")
@@ -145,15 +145,15 @@ class TrainPage(QWidget):
         self.cnn_card = ModelCard(
             "CNN 분류",
             "OccupancyCNN",
-            "칸을 crop한 뒤 empty / occupied 이진 분류. 가볍고 빠른 베이스라인.",
+            "이미 잘라 둔 칸이 빈칸인지 점유인지만 분류합니다. 칸 위치는 찾지 않습니다.",
         )
         self.cnn_card.batch.setValue(32)
         self.cnn_card.start_clicked.connect(lambda: self._start("cnn"))
 
         self.yolo_card = ModelCard(
             "YOLO 파인튜닝",
-            "YOLOv8n",
-            "이미지 전체에서 empty / occupied 박스를 탐지하도록 파인튜닝.",
+            "YOLOv8n-seg",
+            "주차칸 폴리곤 그대로 empty / occupied 영역을 찾습니다. 대각선 칸도 사각형으로 누르지 않습니다.",
         )
         self.yolo_card.batch.setValue(8)
         self.yolo_card.start_clicked.connect(lambda: self._start("yolo"))
