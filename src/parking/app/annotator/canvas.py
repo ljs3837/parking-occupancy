@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import uuid
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
@@ -29,11 +30,13 @@ class Canvas(QWidget):
         self.image: QImage | None = None
         self.polygons: list[dict] = []
         self.selected_id: str | None = None
+        self.selected_ids: set[str] = set()
         self.draft: list[QPointF] = []
         self.mode = "draw"
         self.draw_label = "parking_space"
         self.draw_status = "not occupied"
-        self.clipboard: dict | None = None
+        self.assign_tag: str | None = None
+        self.clipboard: list[dict] | None = None
         self.scale = 1.0
         self.offset = QPointF(0, 0)
         self._panning = False
@@ -43,6 +46,7 @@ class Canvas(QWidget):
         self._drag_snapshot: list[dict] | None = None
         self._drag_last_norm = QPointF()
         self._dirty = False
+        self._wheel_scale_accum = 0
         self._undo_stack: list[list[dict]] = []
         self._redo_stack: list[list[dict]] = []
 
@@ -71,6 +75,7 @@ class Canvas(QWidget):
                 }
             )
         self.selected_id = self.polygons[0]["id"] if self.polygons else None
+        self.selected_ids = {self.selected_id} if self.selected_id else set()
         self.draft.clear()
         self._dirty = False
         self._undo_stack.clear()
@@ -148,7 +153,10 @@ class Canvas(QWidget):
             }
             for p in snapshot
         ]
-        self.selected_id = self.polygons[0]["id"] if self.polygons else None
+        alive = {p["id"] for p in self.polygons}
+        self.selected_ids = {pid for pid in self.selected_ids if pid in alive}
+        if self.selected_id not in alive:
+            self.selected_id = next(iter(self.selected_ids), None)
 
     def _record_undo(self):
         self._undo_stack.append(self._snapshot())
@@ -202,81 +210,172 @@ class Canvas(QWidget):
         }
         self.polygons.append(poly)
         self.selected_id = poly["id"]
+        self.selected_ids = {poly["id"]}
         self.draft.clear()
         self.mark_dirty()
         self.selection_changed.emit()
         self.update()
         return True
 
-    def copy_selected(self):
-        p = self.selected()
-        if not p:
-            return False
-        self.clipboard = {
-            "points": [QPointF(pt) for pt in p["points"]],
-            "tags": list(p["tags"]),
-            "label": p.get("label") or "parking_space",
-        }
-        return True
-
-    def paste_clipboard(self):
-        if not self.clipboard:
-            return False
+    def replace_polygons(self, polygons: list[dict]):
         self._record_undo()
-        points = [
-            self.clamp01(QPointF(pt.x() + 0.02, pt.y() + 0.02))
-            for pt in self.clipboard["points"]
+        self.polygons = [
+            {
+                "id": polygon.get("id") or f"p_{uuid.uuid4().hex[:8]}",
+                "points": [QPointF(float(x), float(y)) for x, y in polygon.get("points") or []],
+                "tags": list(polygon.get("tags") or ["empty"]),
+                "label": polygon.get("label") or "parking_space",
+            }
+            for polygon in polygons
+            if len(polygon.get("points") or []) >= 3
         ]
-        poly = {
-            "id": f"p_{uuid.uuid4().hex[:8]}",
-            "points": points,
-            "tags": list(self.clipboard["tags"]),
-            "label": self.clipboard.get("label") or "parking_space",
-        }
-        self.polygons.append(poly)
-        self.selected_id = poly["id"]
-        self.clipboard = {
-            "points": [QPointF(pt) for pt in points],
-            "tags": list(poly["tags"]),
-            "label": poly["label"],
-        }
+        self.selected_id = self.polygons[-1]["id"] if self.polygons else None
+        self.selected_ids = {self.selected_id} if self.selected_id else set()
+        self.draft.clear()
         self.mark_dirty()
         self.selection_changed.emit()
         self.update()
-        return True
+
+    def _chosen(self) -> list[dict]:
+        chosen = [p for p in self.polygons if p["id"] in self.selected_ids or p["id"] == self.selected_id]
+        return chosen
+
+    def copy_selected(self) -> int:
+        chosen = self._chosen()
+        if not chosen:
+            return 0
+        self.clipboard = [
+            {
+                "points": [QPointF(pt) for pt in p["points"]],
+                "tags": list(p["tags"]),
+                "label": p.get("label") or "parking_space",
+            }
+            for p in chosen
+        ]
+        return len(self.clipboard)
+
+    def paste_clipboard(self) -> int:
+        if not self.clipboard:
+            return 0
+        self._record_undo()
+        pasted: list[dict] = []
+        new_ids: list[str] = []
+        for item in self.clipboard:
+            points = [
+                self.clamp01(QPointF(pt.x() + 0.02, pt.y() + 0.02))
+                for pt in item["points"]
+            ]
+            poly = {
+                "id": f"p_{uuid.uuid4().hex[:8]}",
+                "points": points,
+                "tags": list(item["tags"]),
+                "label": item.get("label") or "parking_space",
+            }
+            self.polygons.append(poly)
+            new_ids.append(poly["id"])
+            pasted.append(
+                {
+                    "points": [QPointF(pt) for pt in points],
+                    "tags": list(poly["tags"]),
+                    "label": poly["label"],
+                }
+            )
+        self.clipboard = pasted
+        self.selected_ids = set(new_ids)
+        self.selected_id = new_ids[-1]
+        self.mark_dirty()
+        self.selection_changed.emit()
+        self.update()
+        return len(new_ids)
 
     def delete_selected(self):
-        if not self.selected_id:
+        ids = set(self.selected_ids)
+        if self.selected_id:
+            ids.add(self.selected_id)
+        if not ids:
             return
         self._record_undo()
-        self.polygons = [p for p in self.polygons if p["id"] != self.selected_id]
+        self.polygons = [p for p in self.polygons if p["id"] not in ids]
         self.selected_id = self.polygons[-1]["id"] if self.polygons else None
+        self.selected_ids = {self.selected_id} if self.selected_id else set()
         self.mark_dirty()
         self.selection_changed.emit()
         self.update()
 
     def set_occupancy(self, tag: str):
-        p = self.selected()
-        if not p:
+        targets = self._chosen()
+        if not targets:
             return
         self._record_undo()
         occ = {"occupied", "empty", "not occupied", "unknown", "occlusion"}
-        p["tags"] = [t for t in p["tags"] if t not in occ]
-        p["tags"].append(tag)
-        p["label"] = "occlusion" if tag == "occlusion" else "parking_space"
+        for p in targets:
+            p["tags"] = [t for t in p["tags"] if t not in occ]
+            p["tags"].append(tag)
+            p["label"] = "occlusion" if tag == "occlusion" else "parking_space"
         self.mark_dirty()
         self.selection_changed.emit()
         self.update()
 
-    def add_tag(self, tag: str):
-        p = self.selected()
-        if not p or not tag:
+    def toggle_occupancy(self, poly: dict) -> str:
+        if poly.get("label") == "occlusion" or "occlusion" in poly.get("tags", []):
+            current = "occlusion"
+        else:
+            current = occupancy_of(poly.get("tags") or [])
+        nxt = "empty" if current == "occupied" else "occupied"
+        self.selected_id = poly["id"]
+        self.selected_ids = {poly["id"]}
+        self.set_occupancy(nxt)
+        return nxt
+
+    def _status_is(self, poly: dict, tag: str) -> bool:
+        if poly.get("label") == "occlusion" or "occlusion" in poly.get("tags", []):
+            current = "occlusion"
+        else:
+            current = occupancy_of(poly.get("tags") or [])
+        if tag == "empty":
+            return current == "empty"
+        return current == tag
+
+    def apply_assign(self) -> bool:
+        tag = self.assign_tag
+        if not tag:
+            return False
+        targets = self._chosen()
+        if not targets or all(self._status_is(poly, tag) for poly in targets):
+            return False
+        self.set_occupancy(tag)
+        return True
+
+    def scale_selected(self, area_factor: float) -> int:
+        targets = self._chosen()
+        if not targets:
+            return 0
+        linear = math.sqrt(area_factor)
+        self._record_undo()
+        for poly in targets:
+            points = poly["points"]
+            if len(points) < 2:
+                continue
+            cx = sum(pt.x() for pt in points) / len(points)
+            cy = sum(pt.y() for pt in points) / len(points)
+            poly["points"] = [
+                self.clamp01(QPointF(cx + (pt.x() - cx) * linear, cy + (pt.y() - cy) * linear))
+                for pt in points
+            ]
+        self.mark_dirty()
+        self.update()
+        return len(targets)
+
+    def _scale_by_wheel(self, dy: int):
+        if not dy:
             return
-        if tag not in p["tags"]:
-            self._record_undo()
-            p["tags"].append(tag)
-            self.mark_dirty()
-            self.selection_changed.emit()
+        self._wheel_scale_accum += dy
+        notches = int(self._wheel_scale_accum / 120)
+        if notches == 0:
+            return
+        self._wheel_scale_accum -= notches * 120
+        factor = 1.01 ** notches if notches > 0 else 0.99 ** (-notches)
+        self.scale_selected(factor)
 
     def _hit(self, n: QPointF) -> dict | None:
         for p in reversed(self.polygons):
@@ -322,7 +421,7 @@ class Canvas(QWidget):
             is_occlusion = p.get("label") == "occlusion" or "occlusion" in p.get("tags", [])
             occ = "occlusion" if is_occlusion else occupancy_of(p["tags"])
             color = OCCLUSION_COLOR if is_occlusion else OCC_COLORS.get(occ, OCC_COLORS["unknown"])
-            selected = p["id"] == self.selected_id
+            selected = p["id"] in self.selected_ids or p["id"] == self.selected_id
             fill = QColor(color)
             fill.setAlpha(90 if selected else 55)
             screen_pts = [self.to_screen(pt) for pt in p["points"]]
@@ -334,7 +433,7 @@ class Canvas(QWidget):
                 painter.setBrush(QColor("#ffffff"))
                 painter.setPen(Qt.PenStyle.NoPen)
                 for s in screen_pts:
-                    painter.drawEllipse(s, 4, 4)
+                    painter.drawEllipse(s, 5, 5)
 
             c = QPointF(
                 sum(pt.x() for pt in screen_pts) / len(screen_pts),
@@ -355,6 +454,10 @@ class Canvas(QWidget):
     def wheelEvent(self, event):
         if not self.image:
             return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._scale_by_wheel(event.angleDelta().y())
+            event.accept()
+            return
         pos = event.position()
         before = self.to_norm(pos)
         factor = 1.12 if event.angleDelta().y() > 0 else 0.89
@@ -363,9 +466,23 @@ class Canvas(QWidget):
         self.offset += pos - after
         self.update()
 
+    def _start_move(self, n: QPointF):
+        self._dragging = True
+        self._drag_vertex_index = None
+        self._drag_snapshot = self._snapshot()
+        self._drag_last_norm = n
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and self.mode == "draw":
+            self.close_draft()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         if not self.image:
             return
+        self.setFocus()
         pos = event.position()
         if event.button() == Qt.MouseButton.MiddleButton or (
             event.button() == Qt.MouseButton.LeftButton
@@ -379,10 +496,30 @@ class Canvas(QWidget):
         if not (0 <= n.x() <= 1 and 0 <= n.y() <= 1):
             return
 
-        if self.mode == "select" or event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            vertex_hit = self._hit_vertex(n)
-            if vertex_hit:
+        if self.mode == "toggle" and event.button() == Qt.MouseButton.LeftButton:
+            hit = self._hit(n)
+            if hit:
+                self.toggle_occupancy(hit)
+            return
+
+        selecting = self.mode == "select" or bool(
+            event.modifiers() & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.ControlModifier)
+        )
+        if selecting:
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            hit = self._hit(n)
+            if shift and hit:
+                self.selected_ids.add(hit["id"])
+                self.selected_id = hit["id"]
+                self.apply_assign()
+                self._start_move(n)
+                self.selection_changed.emit()
+                self.update()
+                return
+            vertex_hit = None if shift else self._hit_vertex(n)
+            if vertex_hit and len(self.selected_ids) <= 1:
                 self.selected_id = vertex_hit[0]["id"]
+                self.selected_ids = {self.selected_id}
                 self._dragging = True
                 self._drag_vertex_index = vertex_hit[1]
                 self._drag_snapshot = self._snapshot()
@@ -390,13 +527,16 @@ class Canvas(QWidget):
                 self.selection_changed.emit()
                 self.update()
                 return
-            hit = self._hit(n)
-            self.selected_id = hit["id"] if hit else None
-            if hit:
-                self._dragging = True
-                self._drag_vertex_index = None
-                self._drag_snapshot = self._snapshot()
-                self._drag_last_norm = n
+            if hit and hit["id"] in self.selected_ids and len(self.selected_ids) > 1:
+                self.selected_id = hit["id"]
+                self._start_move(n)
+            elif hit:
+                self.selected_id = hit["id"]
+                self.selected_ids = {hit["id"]}
+                self._start_move(n)
+            else:
+                self.selected_id = None
+                self.selected_ids = set()
             self.selection_changed.emit()
             self.update()
             return
@@ -423,10 +563,14 @@ class Canvas(QWidget):
                 self.mark_dirty()
                 self.update()
                 return
-            if p:
-                p["points"] = [
-                    self.clamp01(QPointF(pt.x() + dx, pt.y() + dy)) for pt in p["points"]
-                ]
+            targets = [poly for poly in self.polygons if poly["id"] in self.selected_ids]
+            if not targets and p:
+                targets = [p]
+            if targets:
+                for poly in targets:
+                    poly["points"] = [
+                        self.clamp01(QPointF(pt.x() + dx, pt.y() + dy)) for pt in poly["points"]
+                    ]
                 self._drag_last_norm = n
                 self.mark_dirty()
                 self.update()

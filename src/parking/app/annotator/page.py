@@ -5,13 +5,15 @@ from pathlib import Path
 from PyQt6.QtCore import QDir, QSortFilterProxyModel, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFileSystemModel, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSizePolicy, QSplitter, QToolBar,
-    QTreeView, QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QPushButton, QSizePolicy, QSplitter,
+    QToolBar, QTreeView, QVBoxLayout, QWidget,
 )
 
 from parking.app.annotator.canvas import Canvas
-from parking.app.annotator.io import annot_path, load_annotation, occupancy_of, save_annotation
+from parking.app.annotator.io import (
+    annot_path, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
+)
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
 
@@ -66,6 +68,9 @@ class AnnotatorPage(QWidget):
         self.canvas = Canvas()
         self.canvas.changed.connect(self._on_canvas_changed)
         self.canvas.selection_changed.connect(self._refresh_inspector)
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.timeout.connect(self._autosave)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -73,7 +78,7 @@ class AnnotatorPage(QWidget):
         self.toolbar = QToolBar()
         self.toolbar.setMovable(False)
         self.mode_box = QComboBox()
-        self.mode_box.addItems(["그리기 (D)", "선택/이동 (V)"])
+        self.mode_box.addItems(["그리기 (D)", "선택/이동 (V)", "상태변경 (E)"])
         self.mode_box.currentIndexChanged.connect(self._mode_changed)
         self.toolbar.addWidget(self.mode_box)
         self.target_box = QComboBox()
@@ -81,9 +86,10 @@ class AnnotatorPage(QWidget):
         self.target_box.currentIndexChanged.connect(self._target_changed)
         self.toolbar.addWidget(self.target_box)
         for text, slot in [
-            ("폴리곤 닫기", self.canvas.close_draft), ("복사", self._copy),
+            ("닫기 (Space)", self.canvas.close_draft), ("복사", self._copy),
             ("붙여넣기", self._paste), ("색인 삭제", self._delete_selected_polygon),
-            ("맞춤", self.canvas.fit), ("저장", self.save_current),
+            ("맞춤", self.canvas.fit), ("폴더 칸 적용", self._apply_folder_polygons),
+            ("저장", self.save_current),
             ("실행 취소", self._undo), ("다시 실행", self._redo),
         ]:
             self.toolbar.addAction(text, slot)
@@ -144,9 +150,11 @@ class AnnotatorPage(QWidget):
         side_layout.addWidget(self.file_tree, 1)
         side_layout.addWidget(QLabel("폴리곤"))
         self.poly_list = QListWidget()
-        self.poly_list.itemClicked.connect(self._select_poly_item)
+        self.poly_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._updating_poly_list = False
+        self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
-        hint = QLabel("1 차 없음 / 2 차 있음 / Del 색인 삭제 / Ctrl+R 파일 삭제")
+        hint = QLabel("폴더 칸 적용으로 같은 폴더 칸을 가져옴 · 기본은 차 없음 · E 로 상태 전환")
         hint.setWordWrap(True)
         side_layout.addWidget(hint)
         tag_row = QHBoxLayout()
@@ -155,17 +163,6 @@ class AnnotatorPage(QWidget):
             button.clicked.connect(lambda _=False, k=key: self._use_status(k))
             tag_row.addWidget(button)
         side_layout.addLayout(tag_row)
-        self.tag_label = QLabel("태그: -")
-        self.tag_label.setWordWrap(True)
-        side_layout.addWidget(self.tag_label)
-        add_row = QHBoxLayout()
-        self.tag_input = QLineEdit()
-        self.tag_input.setPlaceholderText("사용자 태그")
-        add_button = QPushButton("추가")
-        add_button.clicked.connect(self._add_custom_tag)
-        add_row.addWidget(self.tag_input)
-        add_row.addWidget(add_button)
-        side_layout.addLayout(add_row)
 
         splitter = QSplitter()
         splitter.addWidget(self.canvas)
@@ -180,7 +177,10 @@ class AnnotatorPage(QWidget):
     def _bind_shortcuts(self):
         QShortcut(QKeySequence("D"), self, activated=lambda: self.mode_box.setCurrentIndex(0))
         QShortcut(QKeySequence("V"), self, activated=lambda: self.mode_box.setCurrentIndex(1))
-        QShortcut(QKeySequence("Return"), self, activated=self.canvas.close_draft)
+        QShortcut(QKeySequence("E"), self, activated=lambda: self.mode_box.setCurrentIndex(2))
+        space = QShortcut(QKeySequence(Qt.Key.Key_Space), self.canvas)
+        space.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        space.activated.connect(self.canvas.close_draft)
         QShortcut(QKeySequence("Ctrl+C"), self, activated=self._copy)
         QShortcut(QKeySequence("Ctrl+V"), self, activated=self._paste)
         for widget in (self.canvas, self.poly_list):
@@ -198,26 +198,47 @@ class AnnotatorPage(QWidget):
         QShortcut(QKeySequence("Esc"), self, activated=self._cancel_draft)
 
     def _mode_changed(self, index: int):
-        self.canvas.mode = "draw" if index == 0 else "select"
+        self.canvas.mode = {0: "draw", 1: "select"}.get(index, "toggle")
+        self.canvas.setCursor(
+            Qt.CursorShape.PointingHandCursor if self.canvas.mode == "toggle" else Qt.CursorShape.ArrowCursor
+        )
 
-    def _target_changed(self, index: int):
+    def _apply_target(self, index: int):
         if index == 2:
             self.canvas.draw_label = "occlusion"
             self.canvas.draw_status = "occlusion"
+            self.canvas.assign_tag = "occlusion"
             return
         self.canvas.draw_label = "parking_space"
-        self.canvas.draw_status = "occupied" if index == 1 else "not occupied"
+        occupied = index == 1
+        self.canvas.draw_status = "occupied" if occupied else "not occupied"
+        self.canvas.assign_tag = "occupied" if occupied else "empty"
+
+    def _target_changed(self, index: int):
+        self._apply_target(index)
+        self.canvas.apply_assign()
 
     def _use_status(self, tag: str):
+        self.canvas.assign_tag = tag
         index = {"empty": 0, "occupied": 1, "occlusion": 2}.get(tag)
         if index is not None:
+            self.target_box.blockSignals(True)
             self.target_box.setCurrentIndex(index)
-            self._target_changed(index)
+            self.target_box.blockSignals(False)
+            self._apply_target(index)
         self.canvas.set_occupancy(tag)
 
     def _on_canvas_changed(self):
-        self.status_message.emit("저장되지 않은 변경")
         self._refresh_inspector()
+        self._autosave_timer.start(150)
+
+    def _autosave(self):
+        if self.current_path and self.canvas.dirty:
+            self.save_current()
+
+    def _flush_autosave(self):
+        self._autosave_timer.stop()
+        self._autosave()
 
     def _undo(self):
         if self.canvas.undo():
@@ -350,7 +371,7 @@ class AnnotatorPage(QWidget):
         return None
 
     def _delete_selected_polygon(self):
-        if not self.canvas.selected_id:
+        if not self.canvas.selected_ids and not self.canvas.selected_id:
             self.status_message.emit("선택된 색인이 없습니다")
             return
         self.canvas.delete_selected()
@@ -374,6 +395,7 @@ class AnnotatorPage(QWidget):
         except (OSError, ValueError):
             return
         next_rel = self._neighbor_image_rel(index, path)
+        self._autosave_timer.stop()
         self.canvas._dirty = False
         self.current_path = None
         try:
@@ -397,14 +419,13 @@ class AnnotatorPage(QWidget):
         self.canvas.image = None
         self.canvas.polygons.clear()
         self.canvas.selected_id = None
+        self.canvas.selected_ids = set()
         self.canvas.update()
         self._refresh_inspector()
 
     def confirm_leave(self) -> bool:
-        if not self.canvas.dirty:
-            return True
-        result = QMessageBox.question(self, "저장 확인", "저장하지 않은 변경이 있습니다. 이동할까요?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        return result == QMessageBox.StandardButton.Yes
+        self._flush_autosave()
+        return True
 
     def open_image(self, rel: str):
         if rel == self.current_path:
@@ -415,6 +436,20 @@ class AnnotatorPage(QWidget):
         self.current_path = rel
         self.status_message.emit(f"불러옴: {rel}")
         self._refresh_inspector()
+
+    def _apply_folder_polygons(self):
+        if not self.current_path:
+            self.status_message.emit("사진을 먼저 여세요")
+            return
+        if not Path(self.current_path).as_posix().startswith("cctv_image/"):
+            self.status_message.emit("cctv_image 폴더에서만 적용됩니다")
+            return
+        applied = polygons_from_folder_layout(self.current_path, self.canvas.export_polygons())
+        if not applied:
+            self.status_message.emit("이 폴더에 적용할 칸이 없습니다. 한 장에서 칸을 먼저 그리세요")
+            return
+        self.canvas.replace_polygons(applied)
+        self.status_message.emit(f"폴더 칸 {len(applied)}개 적용 · 새 칸은 차 없음")
 
     def save_current(self):
         if not self.current_path:
@@ -427,6 +462,7 @@ class AnnotatorPage(QWidget):
             self.fs_model.dataChanged.emit(index, index, [Qt.ItemDataRole.ForegroundRole])
 
     def _refresh_inspector(self):
+        self._updating_poly_list = True
         self.poly_list.clear()
         counts = {"empty": 0, "occupied": 0, "unknown": 0, "occlusion": 0}
         for index, polygon in enumerate(self.canvas.polygons):
@@ -436,33 +472,28 @@ class AnnotatorPage(QWidget):
             item = QListWidgetItem(f"#{index + 1}  {state_name}  ({len(polygon['points'])}개 꼭짓점)")
             item.setData(Qt.ItemDataRole.UserRole, polygon["id"])
             self.poly_list.addItem(item)
-            if polygon["id"] == self.canvas.selected_id:
+            if polygon["id"] in self.canvas.selected_ids or polygon["id"] == self.canvas.selected_id:
                 item.setSelected(True)
-        polygon = self.canvas.selected()
-        self.tag_label.setText("태그: " + (", ".join(polygon["tags"]) if polygon and polygon["tags"] else "-"))
+        self._updating_poly_list = False
         self.dashboard_label.setText(
             f"주차 현황 | 전체 {sum(counts.values())} | 차 없음 {counts['empty']} | "
             f"차 있음 {counts['occupied']} | 미정 {counts['unknown']} | 가림 {counts['occlusion']}"
         )
 
-    def _select_poly_item(self, item: QListWidgetItem):
-        self.canvas.selected_id = item.data(Qt.ItemDataRole.UserRole)
+    def _on_poly_selection(self):
+        if self._updating_poly_list:
+            return
+        ids = [item.data(Qt.ItemDataRole.UserRole) for item in self.poly_list.selectedItems()]
+        self.canvas.selected_ids = set(ids)
+        self.canvas.selected_id = ids[-1] if ids else None
+        if len(ids) > 1:
+            self.canvas.apply_assign()
         self.canvas.update()
-        self._refresh_inspector()
 
     def _copy(self):
-        self.status_message.emit("복사됨" if self.canvas.copy_selected() else "선택된 폴리곤 없음")
+        count = self.canvas.copy_selected()
+        self.status_message.emit(f"{count}개 복사됨" if count else "선택된 폴리곤 없음")
 
     def _paste(self):
-        self.status_message.emit("붙여넣음" if self.canvas.paste_clipboard() else "클립보드가 비어 있음")
-
-    def _add_custom_tag(self):
-        tag = self.tag_input.text().strip()
-        if not tag:
-            tag, ok = QInputDialog.getText(self, "태그", "태그 이름")
-            if not ok:
-                return
-            tag = tag.strip()
-        self.canvas.add_tag(tag)
-        self.tag_input.clear()
-        self._refresh_inspector()
+        count = self.canvas.paste_clipboard()
+        self.status_message.emit(f"{count}개 붙여넣음" if count else "클립보드가 비어 있음")

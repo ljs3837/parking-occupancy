@@ -114,11 +114,90 @@ def polygons_from_annotation(data) -> list[dict]:
 
 
 def load_annotation(rel: str) -> list[dict]:
-    ap = annot_path(Path(rel))
-    if not ap.exists():
+    return _read_image_polygons(rel)
+
+
+def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> list[dict]:
+    """같은 폴더에 저장된 칸 모양. 이 사진에 상태가 없으면 차 없음."""
+    if not _shares_polygons(rel):
         return []
-    data = json.loads(ap.read_text(encoding="utf-8"))
-    return polygons_from_annotation(data)
+    layout = _read_layout(rel)
+    if not layout:
+        return []
+    by_id = {polygon.get("id"): polygon for polygon in current or [] if polygon.get("id")}
+    applied = []
+    for polygon in layout:
+        source = by_id.get(polygon["id"])
+        if polygon["label"] == "occlusion":
+            tags, label = ["occlusion"], "occlusion"
+        elif source and source.get("tags"):
+            tags = list(source["tags"])
+            label = "occlusion" if source.get("label") == "occlusion" or "occlusion" in tags else "parking_space"
+            if label == "occlusion":
+                tags = ["occlusion"]
+        else:
+            tags, label = ["empty"], "parking_space"
+        applied.append(
+            {
+                "id": polygon["id"],
+                "points": [list(point) for point in polygon["points"]],
+                "tags": tags,
+                "label": label,
+            }
+        )
+    return applied
+
+
+def _shares_polygons(rel: str) -> bool:
+    return Path(rel).as_posix().startswith("cctv_image/")
+
+
+def _layout_path(rel: str) -> Path:
+    return ANNOT_DIR / Path(rel).parent / "_layout.json"
+
+
+def _read_image_polygons(rel: str) -> list[dict]:
+    path = annot_path(Path(rel))
+    if not path.exists():
+        return []
+    return polygons_from_annotation(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _read_layout(rel: str) -> list[dict]:
+    path = _layout_path(rel)
+    if not path.is_file():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    polygons = []
+    for index, item in enumerate(data.get("polygons") or [], start=1):
+        points = [[float(x), float(y)] for x, y in item.get("points") or []]
+        if len(points) < 3:
+            continue
+        label = "occlusion" if item.get("label") == "occlusion" else "parking_space"
+        polygons.append(
+            {
+                "id": item.get("id") or f"p_{index}",
+                "points": points,
+                "tags": ["occlusion"] if label == "occlusion" else ["empty"],
+                "label": label,
+            }
+        )
+    return polygons
+
+
+def _write_layout(rel: str, polygons: list[dict]) -> None:
+    path = _layout_path(rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    items = []
+    for polygon in polygons:
+        points = [[float(x), float(y)] for x, y in polygon.get("points") or []]
+        if len(points) < 3:
+            continue
+        tags = [str(tag).lower() for tag in polygon.get("tags") or []]
+        label = "occlusion" if polygon.get("label") == "occlusion" or "occlusion" in tags else "parking_space"
+        items.append({"id": polygon.get("id") or f"p_{len(items) + 1}", "points": points, "label": label})
+    payload = {"_cls": "SharedLayout", "polygons": items}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def save_annotation(rel: str, polygons: list[dict]) -> Path:
@@ -133,6 +212,7 @@ def save_annotation(rel: str, polygons: list[dict]) -> Path:
         polylines.append(
             {
                 "_cls": "Polyline",
+                "id": polygon.get("id") or f"p_{space_id}",
                 "attributes": {},
                 "tags": [],
                 "label": label,
@@ -151,6 +231,8 @@ def save_annotation(rel: str, polygons: list[dict]) -> Path:
         "parking_spaces": {"_cls": "Polylines", "polylines": polylines},
     }
     ap.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    if _shares_polygons(rel) and polygons:
+        _write_layout(rel, polygons)
     return ap
 
 

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from parking.app.paths import ROOT
-from parking.training.prepare import MODELS_DIR, build_cnn_crops
+from parking.training.prepare import MODELS_DIR, build_cnn_crops, next_model_path
 
 OUT_DIR = MODELS_DIR / "cnn_occupancy"
 
@@ -98,9 +98,9 @@ def train_cnn(
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     crit = nn.CrossEntropyLoss()
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     best_acc = -1.0
-    best_path = OUT_DIR / "best.pt"
+    best_path = next_model_path(OUT_DIR, "cnn")
+    log(f"[CNN] 저장 파일: {best_path.name}")
 
     for ep in range(1, epochs + 1):
         if should_stop and should_stop():
@@ -135,9 +135,9 @@ def train_cnn(
             )
             log(f"[CNN] best 저장 → {best_path} (acc={best_acc:.3f})")
 
-    meta = OUT_DIR / "README.txt"
-    meta.write_text(
-        f"OccupancyCNN\nbest: {best_path}\nval_acc: {best_acc:.4f}\nroot: {ROOT}\n",
+    note = best_path.with_suffix(".txt")
+    note.write_text(
+        f"OccupancyCNN\nfile: {best_path.name}\nval_acc: {best_acc:.4f}\n",
         encoding="utf-8",
     )
     log(f"[CNN] 완료 best_acc={best_acc:.3f}")

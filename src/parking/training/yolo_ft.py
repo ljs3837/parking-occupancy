@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from parking.training.prepare import MODELS_DIR, build_yolo_dataset
+from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_occupancy"
 
@@ -29,39 +29,37 @@ def train_yolo(
 
     from ultralytics import YOLO
 
+    dest = next_model_path(OUT_DIR, "yolo")
+    run_name = dest.stem
+    log(f"[YOLO] 저장 파일: {dest.name}")
     model = YOLO(model_name)
-    # Ultralytics는 자체적으로 중단 콜백이 약해서 epoch 단위로만 확인
     results = model.train(
         data=str(yaml_path),
         epochs=epochs,
         batch=batch,
         imgsz=imgsz,
         project=str(MODELS_DIR / "_runs"),
-        name="yolo_occupancy",
-        exist_ok=True,
+        name=run_name,
+        exist_ok=False,
         verbose=True,
         workers=0,
         patience=max(3, epochs),
     )
 
-    # best 가중치 복사
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     best = Path(results.save_dir) / "weights" / "best.pt"
     if not best.is_file():
-        # fallback
-        cand = MODELS_DIR / "_runs" / "yolo_occupancy" / "weights" / "best.pt"
+        cand = MODELS_DIR / "_runs" / run_name / "weights" / "best.pt"
         best = cand if cand.is_file() else best
-    dest = OUT_DIR / "best.pt"
     if best.is_file():
         shutil.copy2(best, dest)
         log(f"[YOLO] best 저장 → {dest}")
     else:
         raise RuntimeError(f"YOLO best.pt를 찾지 못했습니다: {best}")
 
-    (OUT_DIR / "README.txt").write_text(
+    dest.with_suffix(".txt").write_text(
         f"YOLO segmentation ({model_name})\n"
         "labels: polygon empty/occupied\n"
-        f"best: {dest}\nsource_run: {best}\n",
+        f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )
     log("[YOLO] 완료")

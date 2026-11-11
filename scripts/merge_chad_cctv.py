@@ -1,7 +1,7 @@
 """CHAD_Videos에서 앞번호 1~4 영상을 번호별·파일명순으로 하나씩 합친다.
 
 원본은 삭제하지 않는다. C 드라이브 용량이 부족하므로 결과 파일은 D:\\parking-cctv 에 쓰고,
-data/cctv/1.mp4 같은 바로가기로 연결한다.
+data/observe/1.mp4 같은 바로가기로 연결한다.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from pathlib import Path
 
 import imageio_ffmpeg
 
-SRC = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\cctv\CHAD_Videos")
+SRC = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\observe\CHAD_Videos")
 OUT_DIR = Path(r"D:\parking-cctv")
-LINK_DIR = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\cctv")
+LINK_DIR = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\observe")
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 BATCH = 8
 

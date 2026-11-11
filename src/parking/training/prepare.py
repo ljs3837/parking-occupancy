@@ -9,13 +9,25 @@ from pathlib import Path
 
 import cv2
 
-from parking.app.annotator.io import flat_points, polygons_from_annotation
+from parking.app.annotator.io import flat_points, load_annotation, polygons_from_annotation
 from parking.app.paths import ANNOT_DIR, DATA_DIR, ROOT
 
 SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
+
+
+def next_model_path(directory: Path, stem: str) -> Path:
+    """이전 가중치는 남기고 stem_1.pt, stem_2.pt 순으로 새 경로를 만든다."""
+    directory.mkdir(parents=True, exist_ok=True)
+    used = []
+    for path in directory.glob(f"{stem}_*.pt"):
+        tail = path.stem[len(stem) + 1 :]
+        if tail.isdigit():
+            used.append(int(tail))
+    number = max(used, default=0) + 1
+    return directory / f"{stem}_{number}.pt"
 CNN_DATA = RUNS_DIR / "cnn_crops"
 YOLO_DATA = RUNS_DIR / "yolo_parking"
 
@@ -102,9 +114,11 @@ def _load_local_annotations() -> list[dict]:
     if not ANNOT_DIR.exists():
         return items
     for jp in ANNOT_DIR.rglob("*.json"):
+        if jp.name == "_layout.json":
+            continue
         data = json.loads(jp.read_text(encoding="utf-8"))
         rel = data.get("filepath") or data.get("image") or jp.relative_to(ANNOT_DIR).with_suffix(".jpg").as_posix()
-        item = _item_from_polygons(rel, polygons_from_annotation(data))
+        item = _item_from_polygons(rel, load_annotation(rel))
         if item:
             items.append(item)
     return items

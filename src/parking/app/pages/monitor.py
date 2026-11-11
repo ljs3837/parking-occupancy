@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from parking.app.paths import CCTV_DIR, VIDEO_EXTS
+from parking.app.paths import OBSERVE_DIR, VIDEO_EXTS
 from parking.perception.live import LiveDetector, draw_detections, summarize
 
 DETECTOR = LiveDetector()
@@ -40,11 +40,21 @@ def grid_columns(count: int) -> int:
     return 3
 
 
+def default_videos() -> list[Path]:
+    numbered = [OBSERVE_DIR / f"{index}.mp4" for index in range(1, 5)]
+    if all(path.is_file() for path in numbered):
+        return numbered
+    merged = [OBSERVE_DIR / "merged" / f"{index}.mp4" for index in range(1, 5)]
+    if all(path.is_file() for path in merged):
+        return merged
+    return list_videos()[:4]
+
+
 def list_videos() -> list[Path]:
-    CCTV_DIR.mkdir(parents=True, exist_ok=True)
+    OBSERVE_DIR.mkdir(parents=True, exist_ok=True)
     videos = [
         path
-        for path in CCTV_DIR.rglob("*")
+        for path in OBSERVE_DIR.rglob("*")
         if path.is_file() and path.suffix.lower() in VIDEO_EXTS
     ]
     videos.sort()
@@ -95,6 +105,9 @@ class VideoWorker(QThread):
         frame_index = 0
         model_sent = False
         fps = capture.get(cv2.CAP_PROP_FPS) or 30
+        if fps < 1:
+            fps = 30
+        frame_interval = 1.0 / fps
         frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0
         total_seconds = frame_count / fps if fps else 0
         while self._running:
@@ -122,7 +135,7 @@ class VideoWorker(QThread):
                     boxes = []
                     self.failed.emit(self.index, f"인식 실패: {exc}")
                     self.detect = False
-            remain = 0.12 - (time.perf_counter() - started)
+            remain = frame_interval - (time.perf_counter() - started)
             if remain > 0:
                 self.msleep(int(remain * 1000))
         capture.release()
@@ -173,7 +186,7 @@ class CameraTile(QFrame):
         self.stop()
         self.path = path
         self.clock.setText("--:-- / --:--")
-        self.screen.setText("대기")
+        self.screen.setText(Path(path).name)
 
     def play(self, detect: bool = True):
         if not self.path:
@@ -260,7 +273,7 @@ class MonitorPage(QWidget):
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(12, 12, 12, 12)
         side_layout.setSpacing(8)
-        side_layout.addWidget(QLabel("CCTV 영상"))
+        side_layout.addWidget(QLabel("관제 영상"))
         refresh_btn = QPushButton("목록 새로고침")
         refresh_btn.clicked.connect(self.refresh_videos)
         side_layout.addWidget(refresh_btn)
@@ -283,6 +296,8 @@ class MonitorPage(QWidget):
 
     def apply_count(self):
         paths = [tile.path for tile in self.tiles]
+        if not any(paths):
+            paths = [str(path) for path in default_videos()]
         self.stop_all()
         while self.grid.count():
             item = self.grid.takeAt(0)
@@ -308,14 +323,14 @@ class MonitorPage(QWidget):
         self.video_list.clear()
         videos = list_videos()
         for path in videos:
-            item = QListWidgetItem(path.relative_to(CCTV_DIR).as_posix())
+            item = QListWidgetItem(path.relative_to(OBSERVE_DIR).as_posix())
             item.setData(Qt.ItemDataRole.UserRole, str(path))
             item.setToolTip(str(path))
             self.video_list.addItem(item)
         if videos:
             self.video_hint.setText(f"{len(videos)}개 · 누르면 선택한 화면으로 들어갑니다.")
         else:
-            self.video_hint.setText(f"영상이 없습니다. {CCTV_DIR} 에 넣어 주세요.")
+            self.video_hint.setText(f"영상이 없습니다. {OBSERVE_DIR} 에 넣어 주세요.")
 
     def select_tile(self, index: int):
         self.selected_index = index
