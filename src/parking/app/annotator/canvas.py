@@ -9,10 +9,11 @@ from PyQt6.QtWidgets import QWidget
 from parking.app.annotator.io import occupancy_of
 
 OCC_COLORS = {
-    "occupied": QColor("#2ec4b6"),
-    "empty": QColor("#e76f51"),
-    "unknown": QColor("#9aa5b5"),
+    "occupied": QColor("#ef476f"),
+    "empty": QColor("#2ec4b6"),
+    "unknown": QColor("#f4c95d"),
 }
+OCCLUSION_COLOR = QColor("#a78bfa")
 
 
 class Canvas(QWidget):
@@ -30,14 +31,19 @@ class Canvas(QWidget):
         self.selected_id: str | None = None
         self.draft: list[QPointF] = []
         self.mode = "draw"
+        self.draw_label = "parking_space"
         self.clipboard: dict | None = None
         self.scale = 1.0
         self.offset = QPointF(0, 0)
         self._panning = False
         self._pan_last = QPointF()
         self._dragging = False
+        self._drag_vertex_index: int | None = None
+        self._drag_snapshot: list[dict] | None = None
         self._drag_last_norm = QPointF()
         self._dirty = False
+        self._undo_stack: list[list[dict]] = []
+        self._redo_stack: list[list[dict]] = []
 
     @property
     def dirty(self) -> bool:
@@ -66,6 +72,8 @@ class Canvas(QWidget):
         self.selected_id = self.polygons[0]["id"] if self.polygons else None
         self.draft.clear()
         self._dirty = False
+        self._undo_stack.clear()
+        self._redo_stack.clear()
         self.fit()
         self.selection_changed.emit()
         self.update()
@@ -118,14 +126,69 @@ class Canvas(QWidget):
                 return p
         return None
 
+    def _snapshot(self) -> list[dict]:
+        return [
+            {
+                "id": p["id"],
+                "points": [[pt.x(), pt.y()] for pt in p["points"]],
+                "tags": list(p["tags"]),
+                "label": p.get("label") or "parking_space",
+            }
+            for p in self.polygons
+        ]
+
+    def _restore(self, snapshot: list[dict]):
+        self.polygons = [
+            {
+                "id": p["id"],
+                "points": [QPointF(float(x), float(y)) for x, y in p["points"]],
+                "tags": list(p.get("tags") or []),
+                "label": p.get("label") or "parking_space",
+            }
+            for p in snapshot
+        ]
+        self.selected_id = self.polygons[0]["id"] if self.polygons else None
+
+    def _record_undo(self):
+        self._undo_stack.append(self._snapshot())
+        self._redo_stack.clear()
+
+    def _finish_drag_history(self):
+        if self._drag_snapshot is not None and self._snapshot() != self._drag_snapshot:
+            self._undo_stack.append(self._drag_snapshot)
+            self._redo_stack.clear()
+        self._drag_snapshot = None
+
+    def undo(self) -> bool:
+        if not self._undo_stack:
+            return False
+        self._redo_stack.append(self._snapshot())
+        self._restore(self._undo_stack.pop())
+        self.mark_dirty()
+        self.selection_changed.emit()
+        self.update()
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo_stack:
+            return False
+        self._undo_stack.append(self._snapshot())
+        self._restore(self._redo_stack.pop())
+        self.mark_dirty()
+        self.selection_changed.emit()
+        self.update()
+        return True
+
     def close_draft(self):
         if len(self.draft) < 3:
             return False
+        self._record_undo()
+        is_occlusion = self.draw_label == "occlusion"
         poly = {
             "id": f"p_{uuid.uuid4().hex[:8]}",
             "points": [self.clamp01(p) for p in self.draft],
-            "tags": ["empty"],
-            "label": "parking_space",
+            "tags": ["occlusion"] if is_occlusion else ["empty"],
+            "label": self.draw_label,
         }
         self.polygons.append(poly)
         self.selected_id = poly["id"]
@@ -149,6 +212,7 @@ class Canvas(QWidget):
     def paste_clipboard(self):
         if not self.clipboard:
             return False
+        self._record_undo()
         points = [
             self.clamp01(QPointF(pt.x() + 0.02, pt.y() + 0.02))
             for pt in self.clipboard["points"]
@@ -174,6 +238,7 @@ class Canvas(QWidget):
     def delete_selected(self):
         if not self.selected_id:
             return
+        self._record_undo()
         self.polygons = [p for p in self.polygons if p["id"] != self.selected_id]
         self.selected_id = self.polygons[-1]["id"] if self.polygons else None
         self.mark_dirty()
@@ -184,9 +249,11 @@ class Canvas(QWidget):
         p = self.selected()
         if not p:
             return
-        occ = {"occupied", "empty", "not occupied", "unknown"}
+        self._record_undo()
+        occ = {"occupied", "empty", "not occupied", "unknown", "occlusion"}
         p["tags"] = [t for t in p["tags"] if t not in occ]
         p["tags"].append(tag)
+        p["label"] = "occlusion" if tag == "occlusion" else "parking_space"
         self.mark_dirty()
         self.selection_changed.emit()
         self.update()
@@ -196,6 +263,7 @@ class Canvas(QWidget):
         if not p or not tag:
             return
         if tag not in p["tags"]:
+            self._record_undo()
             p["tags"].append(tag)
             self.mark_dirty()
             self.selection_changed.emit()
@@ -205,6 +273,19 @@ class Canvas(QWidget):
             poly = QPolygonF([self.to_screen(pt) for pt in p["points"]])
             if poly.containsPoint(self.to_screen(n), Qt.FillRule.OddEvenFill):
                 return p
+        return None
+
+    def _hit_vertex(self, n: QPointF) -> tuple[dict, int] | None:
+        if not self.selected_id:
+            return None
+        p = self.selected()
+        if not p:
+            return None
+        cursor = self.to_screen(n)
+        for i, point in enumerate(p["points"]):
+            screen = self.to_screen(point)
+            if (screen.x() - cursor.x()) ** 2 + (screen.y() - cursor.y()) ** 2 <= 12 ** 2:
+                return p, i
         return None
 
     def paintEvent(self, _event):
@@ -228,8 +309,9 @@ class Canvas(QWidget):
         for p in self.polygons:
             if len(p["points"]) < 2:
                 continue
-            occ = occupancy_of(p["tags"])
-            color = OCC_COLORS.get(occ, OCC_COLORS["unknown"])
+            is_occlusion = p.get("label") == "occlusion" or "occlusion" in p.get("tags", [])
+            occ = "occlusion" if is_occlusion else occupancy_of(p["tags"])
+            color = OCCLUSION_COLOR if is_occlusion else OCC_COLORS.get(occ, OCC_COLORS["unknown"])
             selected = p["id"] == self.selected_id
             fill = QColor(color)
             fill.setAlpha(90 if selected else 55)
@@ -249,7 +331,7 @@ class Canvas(QWidget):
                 sum(pt.y() for pt in screen_pts) / len(screen_pts),
             )
             painter.setPen(QColor("#e7eef7"))
-            painter.drawText(c, occ[:8])
+            painter.drawText(c, "가림" if is_occlusion else occ[:8])
 
         if self.draft:
             painter.setPen(QPen(QColor("#f4a261"), 2, Qt.PenStyle.DashLine))
@@ -288,10 +370,22 @@ class Canvas(QWidget):
             return
 
         if self.mode == "select" or event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            vertex_hit = self._hit_vertex(n)
+            if vertex_hit:
+                self.selected_id = vertex_hit[0]["id"]
+                self._dragging = True
+                self._drag_vertex_index = vertex_hit[1]
+                self._drag_snapshot = self._snapshot()
+                self._drag_last_norm = n
+                self.selection_changed.emit()
+                self.update()
+                return
             hit = self._hit(n)
             self.selected_id = hit["id"] if hit else None
             if hit:
                 self._dragging = True
+                self._drag_vertex_index = None
+                self._drag_snapshot = self._snapshot()
                 self._drag_last_norm = n
             self.selection_changed.emit()
             self.update()
@@ -313,6 +407,12 @@ class Canvas(QWidget):
             dx = n.x() - self._drag_last_norm.x()
             dy = n.y() - self._drag_last_norm.y()
             p = self.selected()
+            if p and self._drag_vertex_index is not None:
+                p["points"][self._drag_vertex_index] = self.clamp01(n)
+                self._drag_last_norm = n
+                self.mark_dirty()
+                self.update()
+                return
             if p:
                 p["points"] = [
                     self.clamp01(QPointF(pt.x() + dx, pt.y() + dy)) for pt in p["points"]
@@ -323,7 +423,9 @@ class Canvas(QWidget):
 
     def mouseReleaseEvent(self, _event):
         self._panning = False
+        self._finish_drag_history()
         self._dragging = False
+        self._drag_vertex_index = None
 
     def mouseDoubleClickEvent(self, _event):
         if self.mode == "draw":

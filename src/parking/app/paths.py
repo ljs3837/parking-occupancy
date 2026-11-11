@@ -6,3 +6,4 @@ SRC_DIR = ROOT / "src"
 DATA_DIR = ROOT / "data"
 ANNOT_DIR = DATA_DIR / "annotations"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}

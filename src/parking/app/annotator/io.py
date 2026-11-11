@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
+from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS, VIDEO_EXTS
 
 
 def annot_path(rel: Path) -> Path:
@@ -27,11 +27,34 @@ def list_images() -> list[str]:
     return items
 
 
+def list_media() -> list[str]:
+    """Return image and video paths while keeping the existing image API intact."""
+    ANNOT_DIR.mkdir(parents=True, exist_ok=True)
+    annot_root = ANNOT_DIR.resolve()
+    items: list[str] = []
+    for p in DATA_DIR.rglob("*"):
+        if not p.is_file() or p.suffix.lower() not in IMAGE_EXTS | VIDEO_EXTS:
+            continue
+        try:
+            if annot_root in p.resolve().parents:
+                continue
+        except OSError:
+            continue
+        items.append(p.relative_to(DATA_DIR).as_posix())
+    items.sort()
+    return items
+
+
 def load_annotation(rel: str) -> list[dict]:
     ap = annot_path(Path(rel))
     if not ap.exists():
         return []
     data = json.loads(ap.read_text(encoding="utf-8"))
+    # Accept both the current envelope and older files containing a raw list.
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
     return data.get("polygons") or []
 
 
@@ -44,6 +67,8 @@ def save_annotation(rel: str, polygons: list[dict]) -> Path:
 
 
 def occupancy_of(tags: list[str]) -> str:
+    if "occlusion" in tags:
+        return "occlusion"
     if "occupied" in tags:
         return "occupied"
     if "empty" in tags or "not occupied" in tags:
