@@ -15,3 +15,5 @@ fastapi
 uvicorn
 pydantic
 PyQt6
+fiftyone
+huggingface-hub>=0.20.0
