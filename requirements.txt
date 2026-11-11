@@ -12,5 +12,7 @@ supervision
 pyyaml
 tqdm
 PyQt6
+fiftyone
+huggingface-hub>=0.20.0
 torch
 torchvision
