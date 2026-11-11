@@ -11,7 +11,6 @@ plotly
 supervision
 pyyaml
 tqdm
-fastapi
-uvicorn
-pydantic
 PyQt6
+torch
+torchvision

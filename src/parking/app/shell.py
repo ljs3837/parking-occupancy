@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from parking.app.annotator import AnnotatorPage
 from parking.app.pages.home import HomePage
 from parking.app.pages.placeholder import PlaceholderPage
+from parking.app.pages.train import TrainPage
 from parking.app.style import APP_STYLE
 
 
@@ -59,10 +60,8 @@ class AppShell(QMainWindow):
             "관제",
             "실시간 점유·빈자리 현황 화면은 이후 이 메뉴에 붙입니다.",
         )
-        self.train = PlaceholderPage(
-            "학습",
-            "YOLO/분류 학습 파이프라인은 이후 이 메뉴에 붙입니다.",
-        )
+        self.train = TrainPage()
+        self.train.status_message.connect(self._set_status)
 
         for key, title, page in [
             ("home", "홈", self.home),

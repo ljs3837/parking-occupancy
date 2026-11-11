@@ -38,11 +38,12 @@ QPushButton#navBtn[active="true"] {
   border-color: rgba(46, 196, 182, 0.35);
   color: #b8fff7;
 }
-QLineEdit, QComboBox, QListWidget {
+QLineEdit, QComboBox, QListWidget, QSpinBox, QTextEdit {
   background: #141a22;
   border: 1px solid #2a3545;
   border-radius: 8px;
   padding: 6px;
+  color: #e7eef7;
 }
 QListWidget::item:selected {
   background: rgba(46, 196, 182, 0.22);
