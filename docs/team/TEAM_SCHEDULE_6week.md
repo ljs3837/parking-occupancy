@@ -4,7 +4,7 @@
 
 기존 10일 계획의 빠른 시제품 연결과 56일 계획의 환경별 개선·검증을 합친 팀 공식 일정이다. 기존 두 일정은 이 문서로 대체한다. 시작일이 확정되지 않았으므로 주차 기준으로 작성한다.
 
-개인별 주차별 체크리스트: [이종수](docs/team/JONGSU_TASKS.md) · [김태수](docs/team/TAESU_TASKS.md) · [류채연](docs/team/CHAEYEON_TASKS.md) · [엄승연](docs/team/SEUNGYEON_TASKS.md). 각 문서에 담당 작업, 결과물, 협업·리뷰 대상과 주간 기록표를 정리했다.
+개인별 주차별 체크리스트: [이종수](JONGSU_TASKS.md) · [김태수](TAESU_TASKS.md) · [류채연](CHAEYEON_TASKS.md) · [엄승연](SEUNGYEON_TASKS.md). 각 문서에 담당 작업, 결과물, 협업·리뷰 대상과 주간 기록표를 정리했다.
 
 ## 목표와 개발 범위
 

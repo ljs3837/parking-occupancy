@@ -1,6 +1,6 @@
 # 엄승연 — 개인별 6주 할 일
 
-[팀 전체 일정](../../TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
+[팀 전체 일정](TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
 
 담당: **영상 처리·앱 통합** · 주요 작업 경로: `src/parking/app, src/parking/common`
 

@@ -1,6 +1,6 @@
 # 이종수 — 개인별 6주 할 일
 
-[팀 전체 일정](../../TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
+[팀 전체 일정](TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
 
 담당: **주차라인·주차면 자동 발견** · 주요 작업 경로: `src/parking/perception의 면 발견 모듈, src/parking/training`
 

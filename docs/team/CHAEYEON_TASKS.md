@@ -1,6 +1,6 @@
 # 류채연 — 개인별 6주 할 일
 
-[팀 전체 일정](../../TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
+[팀 전체 일정](TEAM_SCHEDULE_6week.md) · [개인별 문서 목록](README.md)
 
 담당: **데이터 도구·성능 평가** · 주요 작업 경로: `evaluation, 데이터 목록·정답 변환·검수 도구`
 
