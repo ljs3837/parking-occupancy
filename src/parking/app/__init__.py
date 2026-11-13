@@ -1,3 +1,1 @@
-from parking.app.run import run
-
-__all__ = ["run"]
+"""앱 구성 패키지. 앱 실행은 src/main.py를 사용한다."""

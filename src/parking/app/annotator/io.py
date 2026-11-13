@@ -200,7 +200,27 @@ def _write_layout(rel: str, polygons: list[dict]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def save_annotation(rel: str, polygons: list[dict]) -> Path:
+def apply_folder_annotations(rel: str, polygons: list[dict]) -> list[str]:
+    """현재 칸을 같은 폴더의 모든 사진에 저장하고 사진별 상태는 유지한다."""
+    if not _shares_polygons(rel) or not polygons:
+        return []
+    folder = DATA_DIR / Path(rel).parent
+    images = sorted(
+        path for path in folder.iterdir()
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+    )
+    save_annotation(rel, polygons)
+    applied = []
+    for path in images:
+        target = path.relative_to(DATA_DIR).as_posix()
+        if target != rel:
+            merged = polygons_from_folder_layout(target, load_annotation(target))
+            save_annotation(target, merged, update_layout=False)
+        applied.append(target)
+    return applied
+
+
+def save_annotation(rel: str, polygons: list[dict], *, update_layout: bool = True) -> Path:
     """samples.json 한 장 분량과 같은 키로 저장한다."""
     ap = annot_path(Path(rel))
     ap.parent.mkdir(parents=True, exist_ok=True)
@@ -231,7 +251,7 @@ def save_annotation(rel: str, polygons: list[dict]) -> Path:
         "parking_spaces": {"_cls": "Polylines", "polylines": polylines},
     }
     ap.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    if _shares_polygons(rel) and polygons:
+    if update_layout and _shares_polygons(rel) and polygons:
         _write_layout(rel, polygons)
     return ap
 

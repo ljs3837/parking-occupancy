@@ -2,8 +2,6 @@
 
 사용:
   python src/main.py
-  # 또는
-  cd src && python -m parking
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ SRC = Path(__file__).resolve().parent
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from parking.app import run
+from parking.app.application import run
 
 
 def main() -> int:

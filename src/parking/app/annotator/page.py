@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    annot_path, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
+    annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -444,12 +444,25 @@ class AnnotatorPage(QWidget):
         if not Path(self.current_path).as_posix().startswith("cctv_image/"):
             self.status_message.emit("cctv_image 폴더에서만 적용됩니다")
             return
-        applied = polygons_from_folder_layout(self.current_path, self.canvas.export_polygons())
-        if not applied:
+        polygons = self.canvas.export_polygons()
+        if not polygons:
+            polygons = polygons_from_folder_layout(self.current_path)
+        if not polygons:
             self.status_message.emit("이 폴더에 적용할 칸이 없습니다. 한 장에서 칸을 먼저 그리세요")
             return
-        self.canvas.replace_polygons(applied)
-        self.status_message.emit(f"폴더 칸 {len(applied)}개 적용 · 새 칸은 차 없음")
+        self._autosave_timer.stop()
+        try:
+            applied = apply_folder_annotations(self.current_path, polygons)
+        except (OSError, ValueError) as exc:
+            self.status_message.emit(f"폴더 칸 적용 실패: {exc}")
+            return
+        self.canvas.replace_polygons(polygons)
+        self.canvas._dirty = False
+        for rel in applied:
+            index = self.fs_model.index(str((DATA_DIR / rel).resolve()))
+            if index.isValid():
+                self.fs_model.dataChanged.emit(index, index, [Qt.ItemDataRole.ForegroundRole])
+        self.status_message.emit(f"사진 {len(applied)}장에 폴더 칸 {len(polygons)}개 적용 · 새 칸은 차 없음")
 
     def save_current(self):
         if not self.current_path:
