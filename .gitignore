@@ -14,6 +14,8 @@ dist/
 # Large/local artifacts
 /data/*
 !/data/README.md
+!/data/observe/
+!/data/observe/.gitkeep
 /models/*
 !/models/README.md
 /outputs/*
@@ -23,3 +25,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+.cursor/
+.cursorrules
