@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
+    _shares_polygons, annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -154,7 +154,7 @@ class AnnotatorPage(QWidget):
         self._updating_poly_list = False
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
-        hint = QLabel("폴더 칸 적용으로 같은 폴더 칸을 가져옴 · 기본은 차 없음 · E 로 상태 전환")
+        hint = QLabel("같은 폴더 칸 자동 적용 · 기본은 차 없음 · E 로 상태 전환")
         hint.setWordWrap(True)
         side_layout.addWidget(hint)
         tag_row = QHBoxLayout()
@@ -441,8 +441,8 @@ class AnnotatorPage(QWidget):
         if not self.current_path:
             self.status_message.emit("사진을 먼저 여세요")
             return
-        if not Path(self.current_path).as_posix().startswith("cctv_image/"):
-            self.status_message.emit("cctv_image 폴더에서만 적용됩니다")
+        if not _shares_polygons(self.current_path):
+            self.status_message.emit("cctv_image 또는 camera숫자 폴더에서만 적용됩니다")
             return
         polygons = self.canvas.export_polygons()
         if not polygons:
