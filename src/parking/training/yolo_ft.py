@@ -1,4 +1,4 @@
-"""주차칸 empty/occupied YOLO 파인튜닝."""
+"""주차칸 좌표(단일 클래스) YOLO 파인튜닝. 점유는 차량 YOLO가 따로 판정한다."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
 
-OUT_DIR = MODELS_DIR / "yolo_occupancy"
+OUT_DIR = MODELS_DIR / "yolo_spaces"
 
 
 def train_yolo(
@@ -58,7 +58,7 @@ def train_yolo(
 
     dest.with_suffix(".txt").write_text(
         f"YOLO segmentation ({model_name})\n"
-        "labels: polygon empty/occupied\n"
+        "labels: polygon parking_space (occupancy ignored)\n"
         f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )

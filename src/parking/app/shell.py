@@ -119,10 +119,14 @@ class AppShell(QMainWindow):
     def select_model(self, item: QListWidgetItem):
         model = item.data(Qt.ItemDataRole.UserRole)
         DETECTOR.use(model["kind"], model["path"], model["label"])
-        if model["kind"] == "cnn":
-            self.status.showMessage("CNN은 잘라 둔 칸의 점유만 분류합니다. 칸 위치는 YOLO 분할 모델을 학습해야 합니다.")
+        if model["kind"] == "occupancy":
+            self.status.showMessage(
+                f"주차칸: {model['label']}(파랑) + 차량 YOLO(초록) 동시 인식"
+            )
+        elif model["kind"] == "cnn":
+            self.status.showMessage("CNN은 지원 예정. 지금은 차량 YOLO만 사용합니다.")
         else:
-            self.status.showMessage(f"모델 선택: {model['label']}")
+            self.status.showMessage("차량 YOLO만 인식(초록)")
 
     def _set_status(self, msg: str):
         self.status.showMessage(msg)

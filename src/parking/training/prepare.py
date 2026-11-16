@@ -60,12 +60,21 @@ def _yolo_box(points: list[list[float]]) -> tuple[float, float, float, float]:
 
 
 def _class_id(status: str) -> int | None:
+    """CNN 점유 분류용. YOLO 면 발견은 이 값을 쓰지 않는다."""
     s = (status or "").strip().lower()
     if s in OCC_POS or s == "occupied":
         return 1
     if s in OCC_NEG or s in {"empty", "not occupied"}:
         return 0
     return None
+
+
+def _is_parking_space(polygon: dict) -> bool:
+    """가림이 아닌 주차칸 폴리곤만 면 발견 학습에 쓴다. 점유 여부는 보지 않는다."""
+    tags = [str(tag).lower() for tag in polygon.get("tags") or []]
+    if polygon.get("label") == "occlusion" or "occlusion" in tags:
+        return False
+    return len(_norm_points(polygon.get("points") or [])) >= 3
 
 
 def _resolve_image(rel: str) -> tuple[str, Path] | None:
@@ -99,10 +108,16 @@ def _item_from_polygons(rel: str, polygons: list[dict]) -> dict | None:
     rel, img = resolved
     polys = []
     for polygon in polygons:
-        points = _norm_points(polygon.get("points") or [])
-        if len(points) < 3:
+        if not _is_parking_space(polygon):
             continue
-        polys.append({"points": points, "status": _status_of(polygon)})
+        points = _norm_points(polygon.get("points") or [])
+        polys.append(
+            {
+                "points": points,
+                "status": _status_of(polygon),
+                "label": polygon.get("label") or "parking_space",
+            }
+        )
     if not polys:
         return None
     return {"rel": rel, "path": img, "polygons": polys}
@@ -259,16 +274,21 @@ def build_yolo_dataset(max_images: int, log) -> Path:
 
         lines = []
         for poly in s["polygons"]:
-            cid = _class_id(poly["status"])
-            if cid is None or len(poly["points"]) < 3:
+            # 점유(empty/occupied)는 무시하고 주차칸 좌표만 단일 클래스로 학습한다.
+            if poly.get("label") == "occlusion" or poly.get("status") == "occlusion":
+                continue
+            if len(poly["points"]) < 3:
                 continue
             coords = []
             for x, y in poly["points"]:
                 coords.append(f"{min(1.0, max(0.0, x)):.6f}")
                 coords.append(f"{min(1.0, max(0.0, y)):.6f}")
-            lines.append(f"{cid} " + " ".join(coords))
+            lines.append("0 " + " ".join(coords))
+        if not lines:
+            dst_img.unlink(missing_ok=True)
+            continue
         (YOLO_DATA / "labels" / split / f"{stem}.txt").write_text(
-            "\n".join(lines) + ("\n" if lines else ""),
+            "\n".join(lines) + "\n",
             encoding="utf-8",
         )
         n_img += 1
@@ -281,12 +301,11 @@ def build_yolo_dataset(max_images: int, log) -> Path:
                 "train: images/train",
                 "val: images/val",
                 "names:",
-                "  0: empty",
-                "  1: occupied",
+                "  0: parking_space",
                 "",
             ]
         ),
         encoding="utf-8",
     )
-    log(f"[YOLO 데이터] 이미지 {n_img}장 → {YOLO_DATA}")
+    log(f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장 → {YOLO_DATA}")
     return yaml_path
