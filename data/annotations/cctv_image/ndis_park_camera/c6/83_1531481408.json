@@ -1,0 +1,174 @@
+{
+  "filepath": "cctv_image/ndis_park_camera/c6/83_1531481408.jpg",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "p_3e9035ec",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.6928436213960137,
+              0.26876740277777267
+            ],
+            [
+              0.6640077378733057,
+              0.32987655991198866
+            ],
+            [
+              0.9069981163579933,
+              0.48035785935499564
+            ],
+            [
+              0.9008464612064823,
+              0.3886941236536716
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_ff4babd6",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.4312875080293338,
+              0.1340162596541734
+            ],
+            [
+              0.38890087722233074,
+              0.16258813709030365
+            ],
+            [
+              0.5564289894595331,
+              0.26885547071240207
+            ],
+            [
+              0.6005817298834947,
+              0.21522054289370143
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_06a024c0",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.31649048680347075,
+              0.0812700173605642
+            ],
+            [
+              0.29366772466062585,
+              0.10243019418174491
+            ],
+            [
+              0.35802791390344846,
+              0.13447274765381856
+            ],
+            [
+              0.38054637255105545,
+              0.10908053546840168
+            ]
+          ]
+        ],
+        "index": 3,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 3
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_7af93525",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.2848384372946195,
+              0.408668680740369
+            ],
+            [
+              0.19737100494492266,
+              0.48614858453855664
+            ],
+            [
+              0.3466471703527249,
+              0.9917080659671482
+            ],
+            [
+              0.4223900982444684,
+              0.9966826986347685
+            ],
+            [
+              0.5250499343952612,
+              0.8287888461025803
+            ]
+          ]
+        ],
+        "index": 4,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 4
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_e8bab9aa",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.2238902898137972,
+              0.25790579255721213
+            ],
+            [
+              0.16347224814717054,
+              0.2981450812951445
+            ],
+            [
+              0.19677082792934547,
+              0.48842917549655374
+            ],
+            [
+              0.28327847849747,
+              0.41067868539275215
+            ]
+          ]
+        ],
+        "index": 5,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 5
+      }
+    ]
+  }
+}
