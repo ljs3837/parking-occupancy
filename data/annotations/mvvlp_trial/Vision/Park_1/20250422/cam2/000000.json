@@ -1,0 +1,35 @@
+{
+  "image": "mvvlp_trial/Vision/Park_1/20250422/cam2/000000.jpg",
+  "polygons": [
+    {
+      "id": "Park_1_pilot_floor01",
+      "points": [
+        [
+          0.35833333333333334,
+          0.674074074074074
+        ],
+        [
+          0.4895833333333333,
+          0.4722222222222222
+        ],
+        [
+          0.584375,
+          0.4722222222222222
+        ],
+        [
+          0.6395833333333333,
+          0.7
+        ]
+      ],
+      "tags": [
+        "occupied"
+      ],
+      "label": "parking_space"
+    }
+  ],
+  "meta": {
+    "experiment": "MVVLP pilot",
+    "source_parking_id_mapping": "not established",
+    "labels": "predicted"
+  }
+}
