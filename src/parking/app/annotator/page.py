@@ -154,7 +154,7 @@ class AnnotatorPage(QWidget):
         self._updating_poly_list = False
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
-        hint = QLabel("같은 폴더 칸 자동 적용 · 기본은 차 없음 · E 로 상태 전환")
+        hint = QLabel("같은 폴더 칸 자동 적용 · 기본은 차 없음 · E 로 상태 전환\n그리기 중 Backspace: 마지막 점 취소 · Esc: 전체 취소")
         hint.setWordWrap(True)
         side_layout.addWidget(hint)
         tag_row = QHBoxLayout()
@@ -181,6 +181,9 @@ class AnnotatorPage(QWidget):
         space = QShortcut(QKeySequence(Qt.Key.Key_Space), self.canvas)
         space.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         space.activated.connect(self.canvas.close_draft)
+        backspace = QShortcut(QKeySequence(Qt.Key.Key_Backspace), self.canvas)
+        backspace.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        backspace.activated.connect(self.canvas.undo_last_draft_point)
         QShortcut(QKeySequence("Ctrl+C"), self, activated=self._copy)
         QShortcut(QKeySequence("Ctrl+V"), self, activated=self._paste)
         for widget in (self.canvas, self.poly_list):

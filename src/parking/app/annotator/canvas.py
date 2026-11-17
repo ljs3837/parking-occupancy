@@ -217,6 +217,13 @@ class Canvas(QWidget):
         self.update()
         return True
 
+    def undo_last_draft_point(self) -> bool:
+        if not self.draft:
+            return False
+        self.draft.pop()
+        self.update()
+        return True
+
     def replace_polygons(self, polygons: list[dict]):
         self._record_undo()
         self.polygons = [
