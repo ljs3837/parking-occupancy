@@ -83,12 +83,11 @@ def train_cnn(
     *,
     epochs: int = 5,
     batch: int = 32,
-    max_images: int = 100,
     lr: float = 1e-3,
     log=print,
     should_stop=None,
 ) -> Path:
-    data_dir = build_cnn_crops(max_images, log)
+    data_dir = build_cnn_crops(log)
     train_loader, val_loader, classes = _loaders(data_dir, batch)
     log(f"[CNN] classes={classes}")
 

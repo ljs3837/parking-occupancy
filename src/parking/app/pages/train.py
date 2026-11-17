@@ -20,12 +20,11 @@ class TrainWorker(QThread):
     done = pyqtSignal(str)
     fail = pyqtSignal(str)
 
-    def __init__(self, kind: str, epochs: int, batch: int, max_images: int):
+    def __init__(self, kind: str, epochs: int, batch: int):
         super().__init__()
         self.kind = kind
         self.epochs = epochs
         self.batch = batch
-        self.max_images = max_images
         self._stop = False
 
     def request_stop(self):
@@ -45,7 +44,6 @@ class TrainWorker(QThread):
                 path = train_cnn(
                     epochs=self.epochs,
                     batch=self.batch,
-                    max_images=self.max_images,
                     log=log,
                     should_stop=self._should_stop,
                 )
@@ -55,7 +53,6 @@ class TrainWorker(QThread):
                 path = train_yolo(
                     epochs=self.epochs,
                     batch=self.batch,
-                    max_images=self.max_images,
                     log=log,
                     should_stop=self._should_stop,
                 )
@@ -96,12 +93,8 @@ class ModelCard(QFrame):
         self.batch = QSpinBox()
         self.batch.setRange(1, 128)
         self.batch.setValue(16)
-        self.max_images = QSpinBox()
-        self.max_images.setRange(10, 5000)
-        self.max_images.setValue(80)
         form.addRow("epochs", self.epochs)
         form.addRow("batch", self.batch)
-        form.addRow("max images", self.max_images)
         layout.addLayout(form)
 
         self.btn = QPushButton("학습 시작")
@@ -109,8 +102,8 @@ class ModelCard(QFrame):
         layout.addWidget(self.btn)
         layout.addStretch(1)
 
-    def params(self) -> tuple[int, int, int]:
-        return self.epochs.value(), self.batch.value(), self.max_images.value()
+    def params(self) -> tuple[int, int]:
+        return self.epochs.value(), self.batch.value()
 
     def set_busy(self, busy: bool):
         self.btn.setEnabled(not busy)
@@ -133,7 +126,7 @@ class TrainPage(QWidget):
 
         desc = QLabel(
             "주차칸 라벨(칸 좌표 + 점유여부)로 두 가지 모델을 학습합니다. "
-            "우리 색인(`data/annotations`)만 사용하고 허깅페이스 데이터는 넣지 않습니다."
+            "색인된 사진을 전부 사용합니다. 허깅페이스 데이터는 넣지 않습니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")
@@ -190,10 +183,10 @@ class TrainPage(QWidget):
             QMessageBox.information(self, "학습", "이미 학습이 진행 중입니다.")
             return
         card = self.cnn_card if kind == "cnn" else self.yolo_card
-        epochs, batch, max_images = card.params()
+        epochs, batch = card.params()
         self.log.clear()
-        self._append(f"=== {kind.upper()} 학습 시작 (epochs={epochs}, batch={batch}, max_images={max_images}) ===")
-        self.worker = TrainWorker(kind, epochs, batch, max_images)
+        self._append(f"=== {kind.upper()} 학습 시작 (epochs={epochs}, batch={batch}, 색인 전부) ===")
+        self.worker = TrainWorker(kind, epochs, batch)
         self.worker.log.connect(self._append)
         self.worker.done.connect(self._on_done)
         self.worker.fail.connect(self._on_fail)

@@ -14,13 +14,12 @@ def train_yolo(
     *,
     epochs: int = 5,
     batch: int = 8,
-    max_images: int = 100,
     imgsz: int = 640,
     model_name: str = "yolov8n-seg.pt",
     log=print,
     should_stop=None,
 ) -> Path:
-    yaml_path = build_yolo_dataset(max_images, log)
+    yaml_path = build_yolo_dataset(log)
     log(f"[YOLO] data={yaml_path}")
     log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}")
 

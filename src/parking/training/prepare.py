@@ -130,18 +130,14 @@ def _load_local_annotations() -> list[dict]:
     return items
 
 
-def collect_samples(max_images: int, log) -> list[dict]:
+def collect_samples(log) -> list[dict]:
     local = _load_local_annotations()
-    log(f"[데이터] 로컬 색인 이미지: {len(local)}")
-    if max_images > 0 and len(local) > max_images:
-        random.seed(42)
-        local = random.sample(local, max_images)
-    log(f"[데이터] 학습에 사용: {len(local)}장 (허깅페이스 제외)")
+    log(f"[데이터] 색인된 사진 전부 사용: {len(local)}장 (허깅페이스 제외)")
     return local
 
 
-def build_cnn_crops(max_images: int, log) -> Path:
-    samples = collect_samples(max_images, log)
+def build_cnn_crops(log) -> Path:
+    samples = collect_samples(log)
     if not samples:
         raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
 
@@ -181,12 +177,12 @@ def build_cnn_crops(max_images: int, log) -> Path:
     log(f"[CNN 데이터] train crops={counts['train']}, val crops={counts['val']}")
     log(f"[CNN 데이터] 경로: {CNN_DATA}")
     if counts["train"] < 10:
-        raise RuntimeError("CNN crop이 너무 적습니다. max_images를 늘리거나 색인을 추가하세요.")
+        raise RuntimeError("CNN crop이 너무 적습니다. 점유가 표시된 색인을 추가하세요.")
     return CNN_DATA
 
 
-def build_yolo_dataset(max_images: int, log) -> Path:
-    samples = collect_samples(max_images, log)
+def build_yolo_dataset(log) -> Path:
+    samples = collect_samples(log)
     if not samples:
         raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
 
