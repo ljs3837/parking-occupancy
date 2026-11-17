@@ -6,7 +6,18 @@ from pathlib import Path
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS, VIDEO_EXTS
 
 
+def shares_folder_annotation(rel: str) -> bool:
+    """마지막 폴더의 사진이 같은 CCTV 구도면 색인 JSON 하나를 공유한다."""
+    parts = Path(rel).parts
+    if len(parts) >= 3 and parts[0] == "cctv_image":
+        return True
+    return len(parts) >= 2 and parts[0].startswith("camera") and parts[0][len("camera"):].isdigit()
+
+
 def annot_path(rel: Path) -> Path:
+    rel = Path(rel)
+    if shares_folder_annotation(rel.as_posix()):
+        return ANNOT_DIR / rel.parent / "_layout.json"
     return ANNOT_DIR / rel.with_suffix(".json")
 
 
@@ -113,131 +124,125 @@ def polygons_from_annotation(data) -> list[dict]:
     return polygons
 
 
-def load_annotation(rel: str) -> list[dict]:
-    current = _read_image_polygons(rel)
-    return polygons_from_folder_layout(rel, current) or current
-
-
-def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> list[dict]:
-    """같은 폴더에 저장된 칸 모양. 이 사진에 상태가 없으면 차 없음."""
-    if not _shares_polygons(rel):
-        return []
-    layout = _read_layout(rel)
-    if not layout:
-        return []
-    by_id = {polygon.get("id"): polygon for polygon in current or [] if polygon.get("id")}
-    applied = []
-    for polygon in layout:
-        source = by_id.get(polygon["id"])
-        if polygon["label"] == "occlusion":
-            tags, label = ["occlusion"], "occlusion"
-        elif source and source.get("tags"):
-            tags = list(source["tags"])
-            label = "occlusion" if source.get("label") == "occlusion" or "occlusion" in tags else "parking_space"
-            if label == "occlusion":
-                tags = ["occlusion"]
-        else:
-            tags, label = ["empty"], "parking_space"
-        applied.append(
-            {
-                "id": polygon["id"],
-                "points": [list(point) for point in polygon["points"]],
-                "tags": tags,
-                "label": label,
-            }
-        )
-    return applied
-
-
-def _shares_polygons(rel: str) -> bool:
-    parts = Path(rel).parts
-    if len(parts) < 2:
-        return False
-    root = parts[0]
-    return root == "cctv_image" or (
-        root.startswith("camera") and root[len("camera"):].isdigit()
-    )
-
-
-def _layout_path(rel: str) -> Path:
-    return ANNOT_DIR / Path(rel).parent / "_layout.json"
-
-
-def _read_image_polygons(rel: str) -> list[dict]:
-    path = annot_path(Path(rel))
-    if not path.exists():
-        return []
-    return polygons_from_annotation(json.loads(path.read_text(encoding="utf-8")))
-
-
-def _read_layout(rel: str) -> list[dict]:
-    path = _layout_path(rel)
-    if not path.is_file():
-        # Older annotations predate shared layouts. Reuse a saved image in
-        # this exact folder, without mixing layouts from other cameras.
-        for candidate in sorted(path.parent.glob("*.json")):
-            if candidate.name.startswith("_"):
-                continue
-            image_rel = Path(rel).parent / candidate.with_suffix(".jpg").name
-            polygons = _read_image_polygons(image_rel.as_posix())
-            if polygons:
-                return polygons
-        return []
+def _polygons_from_file(path: Path) -> list[dict]:
     data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("parking_spaces"):
+        return polygons_from_annotation(data)
     polygons = []
     for index, item in enumerate(data.get("polygons") or [], start=1):
-        points = [[float(x), float(y)] for x, y in item.get("points") or []]
+        points = flat_points(item.get("points") or [])
         if len(points) < 3:
             continue
-        label = "occlusion" if item.get("label") == "occlusion" else "parking_space"
-        polygons.append(
-            {
-                "id": item.get("id") or f"p_{index}",
-                "points": points,
-                "tags": ["occlusion"] if label == "occlusion" else ["empty"],
-                "label": label,
-            }
-        )
+        polygon_id = item.get("id") or f"p_{index}"
+        status = (item.get("occupancy_status") or "").strip().lower()
+        if status or item.get("label") == "occlusion":
+            converted = _polygon_from_polyline(
+                {
+                    "id": polygon_id,
+                    "label": item.get("label") or "parking_space",
+                    "points": points,
+                    "occupancy_status": status or "unknown",
+                },
+                polygon_id,
+            )
+            if converted:
+                polygons.append(converted)
+            continue
+        tags = [str(tag).lower() for tag in item.get("tags") or []]
+        label = "occlusion" if item.get("label") == "occlusion" or "occlusion" in tags else "parking_space"
+        if not tags:
+            tags = ["occlusion"] if label == "occlusion" else ["empty"]
+        polygons.append({"id": polygon_id, "points": points, "tags": tags, "label": label})
     return polygons
 
 
-def _write_layout(rel: str, polygons: list[dict]) -> None:
-    path = _layout_path(rel)
+def _write_shared(path: Path, polygons: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     items = []
     for polygon in polygons:
         points = [[float(x), float(y)] for x, y in polygon.get("points") or []]
         if len(points) < 3:
             continue
-        tags = [str(tag).lower() for tag in polygon.get("tags") or []]
-        label = "occlusion" if polygon.get("label") == "occlusion" or "occlusion" in tags else "parking_space"
-        items.append({"id": polygon.get("id") or f"p_{len(items) + 1}", "points": points, "label": label})
+        label, status = _occupancy_status(polygon)
+        items.append(
+            {
+                "id": polygon.get("id") or f"p_{len(items) + 1}",
+                "points": points,
+                "label": label,
+                "occupancy_status": status,
+            }
+        )
     payload = {"_cls": "SharedLayout", "polygons": items}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def apply_folder_annotations(rel: str, polygons: list[dict]) -> list[str]:
-    """현재 칸을 같은 폴더의 모든 사진에 저장하고 사진별 상태는 유지한다."""
-    if not _shares_polygons(rel) or not polygons:
-        return []
-    folder = DATA_DIR / Path(rel).parent
-    images = sorted(
-        path for path in folder.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+def _geom_key(polygons: list[dict]) -> tuple:
+    return tuple(
+        tuple((round(float(x), 4), round(float(y), 4)) for x, y in polygon.get("points") or [])
+        for polygon in polygons
     )
+
+
+def _copy_occupancy(target: list[dict], donor: list[dict]) -> None:
+    if _geom_key(target) != _geom_key(donor):
+        return
+    for dst, src in zip(target, donor):
+        dst["tags"] = list(src.get("tags") or dst.get("tags") or [])
+        dst["label"] = src.get("label") or dst.get("label")
+
+
+def load_annotation(rel: str) -> list[dict]:
+    path = annot_path(Path(rel))
+    if path.is_file():
+        return _polygons_from_file(path)
+    if shares_folder_annotation(rel):
+        legacy = ANNOT_DIR / Path(rel).with_suffix(".json")
+        if legacy.is_file() and legacy != path:
+            return _polygons_from_file(legacy)
+    return []
+
+
+def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> list[dict]:
+    """같은 폴더가 공유하는 칸. current는 예전 호출과의 호환용이다."""
+    del current
+    if not shares_folder_annotation(rel):
+        return []
+    return load_annotation(rel)
+
+
+def _shares_polygons(rel: str) -> bool:
+    return shares_folder_annotation(rel)
+
+
+def _legacy_jsons(folder: Path) -> list[Path]:
+    return sorted(path for path in folder.glob("*.json") if not path.name.startswith("_"))
+
+
+def apply_folder_annotations(rel: str, polygons: list[dict]) -> list[str]:
+    """같은 폴더 사진이 공유하는 색인 파일 하나에 칸을 저장한다."""
+    if not shares_folder_annotation(rel) or not polygons:
+        return []
     save_annotation(rel, polygons)
-    applied = []
-    for path in images:
-        target = path.relative_to(DATA_DIR).as_posix()
-        if target != rel:
-            merged = polygons_from_folder_layout(target, load_annotation(target))
-            save_annotation(target, merged, update_layout=False)
-        applied.append(target)
-    return applied
+    folder = DATA_DIR / Path(rel).parent
+    if not folder.is_dir():
+        return [rel]
+    return [
+        path.relative_to(DATA_DIR).as_posix()
+        for path in sorted(folder.iterdir())
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTS
+    ]
 
 
 def save_annotation(rel: str, polygons: list[dict], *, update_layout: bool = True) -> Path:
-    """samples.json 한 장 분량과 같은 키로 저장한다."""
+    """공유 폴더는 _layout.json 하나만 쓰고, 그 외에는 사진마다 JSON을 쓴다."""
+    del update_layout
+    if shares_folder_annotation(rel):
+        path = annot_path(Path(rel))
+        _write_shared(path, polygons)
+        for legacy in _legacy_jsons(path.parent):
+            legacy.unlink()
+        return path
+
     ap = annot_path(Path(rel))
     ap.parent.mkdir(parents=True, exist_ok=True)
     polylines = []
@@ -267,9 +272,99 @@ def save_annotation(rel: str, polygons: list[dict], *, update_layout: bool = Tru
         "parking_spaces": {"_cls": "Polylines", "polylines": polylines},
     }
     ap.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    if update_layout and _shares_polygons(rel) and polygons:
-        _write_layout(rel, polygons)
     return ap
+
+
+def consolidate_cctv_annotations() -> list[str]:
+    """cctv_image 하위 폴더의 사진별 JSON을 _layout.json 하나로 합친다."""
+    root = ANNOT_DIR / "cctv_image"
+    if not root.is_dir():
+        return []
+    notes = []
+    for folder in sorted(path for path in root.rglob("*") if path.is_dir()):
+        per_image = _legacy_jsons(folder)
+        if not per_image:
+            continue
+        layout = folder / "_layout.json"
+        newest = max(per_image, key=lambda path: (path.stat().st_mtime, path.name))
+        source = newest
+        if layout.is_file():
+            layout_polygons = _polygons_from_file(layout)
+            newest_polygons = _polygons_from_file(newest)
+            if layout_polygons and (
+                not newest_polygons
+                or _geom_key(layout_polygons) == _geom_key(newest_polygons)
+                or layout.stat().st_mtime >= newest.stat().st_mtime
+            ):
+                source = layout
+        polygons = _polygons_from_file(source)
+        if source == layout and polygons:
+            source_key = _geom_key(polygons)
+            donors = []
+            for path in per_image:
+                donor = _polygons_from_file(path)
+                if donor and _geom_key(donor) == source_key:
+                    donors.append((path.stat().st_mtime, donor))
+            if donors:
+                donors.sort(key=lambda item: item[0])
+                _copy_occupancy(polygons, donors[-1][1])
+        if not polygons:
+            notes.append(f"{folder.relative_to(root).as_posix()}: 칸 없음, 건너뜀")
+            continue
+        _write_shared(layout, polygons)
+        for path in per_image:
+            path.unlink()
+        notes.append(
+            f"{folder.relative_to(root).as_posix()}: {len(per_image)}개 통합, 칸 {len(polygons)}개, 기준 {source.name}"
+        )
+    return notes
+
+
+def iter_annotation_sources() -> list[tuple[str, list[dict]]]:
+    """학습용 (이미지 상대경로, 칸 목록). 공유 폴더는 사진 수만큼 같은 칸을 쓴다."""
+    rows: list[tuple[str, list[dict]]] = []
+    seen: set[str] = set()
+    cctv = ANNOT_DIR / "cctv_image"
+    if cctv.is_dir():
+        for layout in sorted(cctv.rglob("_layout.json")):
+            if layout.parent == cctv:
+                continue
+            image_dir = DATA_DIR / layout.parent.relative_to(ANNOT_DIR)
+            if not image_dir.is_dir():
+                continue
+            polygons = _polygons_from_file(layout)
+            if not polygons:
+                continue
+            for image in sorted(image_dir.iterdir()):
+                if not image.is_file() or image.suffix.lower() not in IMAGE_EXTS:
+                    continue
+                rel = image.relative_to(DATA_DIR).as_posix()
+                if rel in seen:
+                    continue
+                seen.add(rel)
+                rows.append((rel, polygons))
+    if not ANNOT_DIR.is_dir():
+        return rows
+    for path in sorted(ANNOT_DIR.rglob("*.json")):
+        if path.name.startswith("_"):
+            continue
+        try:
+            under = path.relative_to(cctv)
+        except ValueError:
+            under = None
+        if under is not None and len(under.parts) >= 2:
+            continue
+        rel = path.relative_to(ANNOT_DIR).with_suffix(".jpg").as_posix()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        rel = data.get("filepath") or data.get("image") or rel
+        if rel in seen:
+            continue
+        polygons = _polygons_from_file(path)
+        if not polygons:
+            continue
+        seen.add(rel)
+        rows.append((rel, polygons))
+    return rows
 
 
 def occupancy_of(tags: list[str]) -> str:

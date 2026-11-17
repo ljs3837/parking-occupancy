@@ -4,8 +4,8 @@ import math
 import uuid
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtGui import QColor, QCursor, QImage, QPainter, QPen, QPolygonF
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from parking.app.annotator.io import occupancy_of
 
@@ -15,6 +15,8 @@ OCC_COLORS = {
     "unknown": QColor("#f4c95d"),
 }
 OCCLUSION_COLOR = QColor("#a78bfa")
+# 화면 픽셀. 확대와 상관없이 같은 거리 안에서 기존 꼭짓점에 붙인다.
+SNAP_RADIUS_PX = 16
 
 
 class Canvas(QWidget):
@@ -49,6 +51,9 @@ class Canvas(QWidget):
         self._wheel_scale_accum = 0
         self._undo_stack: list[list[dict]] = []
         self._redo_stack: list[list[dict]] = []
+        self._snap_norm: QPointF | None = None
+        self._hover_norm: QPointF | None = None
+        self._warping = False
 
     @property
     def dirty(self) -> bool:
@@ -391,6 +396,48 @@ class Canvas(QWidget):
                 return p
         return None
 
+    def _control_held(self) -> bool:
+        return bool(QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier)
+
+    def _snap_norm_at(self, pos: QPointF) -> QPointF | None:
+        """이미 그린 폴리곤 꼭짓점 중 화면 반경 안의 가장 가까운 점."""
+        if not self.image:
+            return None
+        best: QPointF | None = None
+        best_d = SNAP_RADIUS_PX ** 2
+        for poly in self.polygons:
+            for point in poly["points"]:
+                screen = self.to_screen(point)
+                dist = (screen.x() - pos.x()) ** 2 + (screen.y() - pos.y()) ** 2
+                if dist <= best_d:
+                    best_d = dist
+                    best = point
+        return None if best is None else QPointF(best)
+
+    def _move_cursor_to_norm(self, norm: QPointF):
+        if self._warping:
+            return
+        target = self.mapToGlobal(self.to_screen(norm).toPoint())
+        if QCursor.pos() == target:
+            return
+        self._warping = True
+        try:
+            QCursor.setPos(target)
+        finally:
+            self._warping = False
+
+    def _refresh_draw_snap(self, pos: QPointF, ctrl: bool):
+        snap = self._snap_norm_at(pos) if self.mode == "draw" and ctrl else None
+        self._snap_norm = snap
+        if snap is not None:
+            self._hover_norm = QPointF(snap)
+            self._move_cursor_to_norm(snap)
+        elif self.mode == "draw" and self.image:
+            self._hover_norm = self.to_norm(pos)
+        else:
+            self._hover_norm = None
+        self.update()
+
     def _hit_vertex(self, n: QPointF) -> tuple[dict, int] | None:
         if not self.selected_id:
             return None
@@ -457,11 +504,19 @@ class Canvas(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             for pt in self.draft:
                 painter.drawEllipse(self.to_screen(pt), 4, 4)
+            if self._hover_norm is not None:
+                painter.setPen(QPen(QColor("#f4a261"), 1.4, Qt.PenStyle.DotLine))
+                painter.drawLine(self.to_screen(self.draft[-1]), self.to_screen(self._hover_norm))
+        if self._snap_norm is not None:
+            center = self.to_screen(self._snap_norm)
+            painter.setBrush(QColor("#ffffff"))
+            painter.setPen(QPen(QColor("#f4a261"), 2))
+            painter.drawEllipse(center, 7, 7)
 
     def wheelEvent(self, event):
         if not self.image:
             return
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        if self.mode != "draw" and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self._scale_by_wheel(event.angleDelta().y())
             event.accept()
             return
@@ -484,7 +539,23 @@ class Canvas(QWidget):
             self.close_draft()
             event.accept()
             return
+        if event.key() == Qt.Key.Key_Control and self.mode == "draw" and not event.isAutoRepeat():
+            local = self.mapFromGlobal(QCursor.pos())
+            self._refresh_draw_snap(QPointF(local), True)
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Control and not event.isAutoRepeat():
+            self._snap_norm = None
+            self._hover_norm = None
+            self.update()
+        super().keyReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        self._snap_norm = None
+        self._hover_norm = None
+        self.update()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if not self.image:
@@ -500,7 +571,11 @@ class Canvas(QWidget):
             return
 
         n = self.to_norm(pos)
-        if not (0 <= n.x() <= 1 and 0 <= n.y() <= 1):
+        ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        snap = self._snap_norm_at(pos) if self.mode == "draw" and ctrl else None
+        if snap is not None:
+            n = snap
+        elif not (0 <= n.x() <= 1 and 0 <= n.y() <= 1):
             return
 
         if self.mode == "toggle" and event.button() == Qt.MouseButton.LeftButton:
@@ -509,9 +584,10 @@ class Canvas(QWidget):
                 self.toggle_occupancy(hit)
             return
 
+        # 그리기 중 Ctrl은 선택 대신 기존 꼭짓점에 붙인다.
         selecting = self.mode == "select" or bool(
-            event.modifiers() & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.ControlModifier)
-        )
+            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ) or (ctrl and self.mode != "draw")
         if selecting:
             shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             hit = self._hit(n)
@@ -550,10 +626,18 @@ class Canvas(QWidget):
 
         if event.button() == Qt.MouseButton.LeftButton:
             self.draft.append(self.clamp01(n))
+            self._snap_norm = snap
             self.update()
 
     def mouseMoveEvent(self, event):
+        if self._warping:
+            return
         pos = event.position()
+        if self.mode == "draw" and not self._panning and not self._dragging:
+            self._refresh_draw_snap(
+                pos,
+                bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier),
+            )
         if self._panning:
             self.offset += pos - self._pan_last
             self._pan_last = pos

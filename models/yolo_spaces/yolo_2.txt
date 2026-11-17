@@ -1,0 +1,4 @@
+YOLO segmentation (yolov8n-seg.pt)
+labels: polygon parking_space (occupancy ignored)
+file: yolo_2.pt
+source_run: C:\Users\user1\soo\project\parking-occupancy\models\_runs\yolo_2-2\weights\best.pt
