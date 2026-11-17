@@ -16,6 +16,7 @@ dist/
 !/data/README.md
 !/data/observe/
 !/data/observe/.gitkeep
+!/data/annotations/
 /models/*
 !/models/README.md
 /outputs/*
