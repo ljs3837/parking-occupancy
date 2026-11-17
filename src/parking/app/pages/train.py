@@ -38,26 +38,14 @@ class TrainWorker(QThread):
             def log(msg: str):
                 self.log.emit(str(msg))
 
-            if self.kind == "cnn":
-                from parking.training.cnn import train_cnn
+            from parking.training.yolo_ft import train_yolo
 
-                path = train_cnn(
-                    epochs=self.epochs,
-                    batch=self.batch,
-                    log=log,
-                    should_stop=self._should_stop,
-                )
-            elif self.kind == "yolo":
-                from parking.training.yolo_ft import train_yolo
-
-                path = train_yolo(
-                    epochs=self.epochs,
-                    batch=self.batch,
-                    log=log,
-                    should_stop=self._should_stop,
-                )
-            else:
-                raise ValueError(self.kind)
+            path = train_yolo(
+                epochs=self.epochs,
+                batch=self.batch,
+                log=log,
+                should_stop=self._should_stop,
+            )
             self.done.emit(str(path))
         except Exception as e:
             self.fail.emit(str(e))
@@ -125,23 +113,11 @@ class TrainPage(QWidget):
         root.addWidget(title)
 
         desc = QLabel(
-            "주차칸 라벨(칸 좌표 + 점유여부)로 두 가지 모델을 학습합니다. "
-            "색인된 사진을 전부 사용합니다. 허깅페이스 데이터는 넣지 않습니다."
+            "주차칸 YOLO를 학습합니다. 우리 색인과 허깅페이스 PKLot 사진을 전부 사용합니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")
         root.addWidget(desc)
-
-        cards = QHBoxLayout()
-        cards.setSpacing(14)
-
-        self.cnn_card = ModelCard(
-            "CNN 분류",
-            "OccupancyCNN",
-            "이미 잘라 둔 칸이 빈칸인지 점유인지만 분류합니다. 칸 위치는 찾지 않습니다.",
-        )
-        self.cnn_card.batch.setValue(32)
-        self.cnn_card.start_clicked.connect(lambda: self._start("cnn"))
 
         self.yolo_card = ModelCard(
             "YOLO 파인튜닝",
@@ -149,11 +125,8 @@ class TrainPage(QWidget):
             "주차칸 좌표만으로 면을 찾습니다. 차 있음/없음은 학습에 쓰지 않고, 나중에 차량 YOLO로 판정합니다.",
         )
         self.yolo_card.batch.setValue(8)
-        self.yolo_card.start_clicked.connect(lambda: self._start("yolo"))
-
-        cards.addWidget(self.cnn_card)
-        cards.addWidget(self.yolo_card)
-        root.addLayout(cards)
+        self.yolo_card.start_clicked.connect(self._start)
+        root.addWidget(self.yolo_card)
 
         row = QHBoxLayout()
         self.stop_btn = QPushButton("중지")
@@ -174,19 +147,17 @@ class TrainPage(QWidget):
         self.status_message.emit(msg[:80])
 
     def _set_busy(self, busy: bool):
-        self.cnn_card.set_busy(busy)
         self.yolo_card.set_busy(busy)
         self.stop_btn.setEnabled(busy)
 
-    def _start(self, kind: str):
+    def _start(self):
         if self.worker and self.worker.isRunning():
             QMessageBox.information(self, "학습", "이미 학습이 진행 중입니다.")
             return
-        card = self.cnn_card if kind == "cnn" else self.yolo_card
-        epochs, batch = card.params()
+        epochs, batch = self.yolo_card.params()
         self.log.clear()
-        self._append(f"=== {kind.upper()} 학습 시작 (epochs={epochs}, batch={batch}, 색인 전부) ===")
-        self.worker = TrainWorker(kind, epochs, batch)
+        self._append(f"=== YOLO 학습 시작 (epochs={epochs}, batch={batch}, 로컬+허깅페이스 전부) ===")
+        self.worker = TrainWorker("yolo", epochs, batch)
         self.worker.log.connect(self._append)
         self.worker.done.connect(self._on_done)
         self.worker.fail.connect(self._on_fail)

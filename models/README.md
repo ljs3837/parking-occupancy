@@ -6,7 +6,6 @@
 
 | 모델 | 저장 위치 | 설명 |
 |---|---|---|
-| CNN 분류 | `models/cnn_occupancy/best.pt` | 칸 crop → empty/occupied |
-| YOLO 파인튜닝 | `models/yolo_occupancy/best.pt` | YOLOv8n empty/occupied 탐지 |
+| YOLO 주차칸 | `models/yolo_spaces/yolo_*.pt` | 로컬 색인 + PKLot 전체로 학습한 세그멘테이션 |
 
 학습 UI: `python src/main.py` → **학습** 탭

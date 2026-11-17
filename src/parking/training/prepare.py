@@ -1,14 +1,13 @@
-"""로컬 색인 → CNN crop / YOLO 데이터셋 변환."""
+"""로컬 색인과 허깅페이스 PKLot 전부를 YOLO 데이터셋으로 변환."""
 
 from __future__ import annotations
 
+import json
 import random
 import shutil
 from pathlib import Path
 
-import cv2
-
-from parking.app.annotator.io import flat_points, iter_annotation_sources
+from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
 from parking.app.paths import DATA_DIR, ROOT
 
 RUNS_DIR = ROOT / "outputs" / "train"
@@ -25,7 +24,9 @@ def next_model_path(directory: Path, stem: str) -> Path:
             used.append(int(tail))
     number = max(used, default=0) + 1
     return directory / f"{stem}_{number}.pt"
-CNN_DATA = RUNS_DIR / "cnn_crops"
+
+
+SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
 YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
@@ -34,36 +35,6 @@ OCC_NEG = {"empty", "not occupied"}
 
 def _norm_points(points) -> list[list[float]]:
     return flat_points(points)
-
-
-def _bbox_from_points(points: list[list[float]], w: int, h: int) -> tuple[int, int, int, int]:
-    xs = [p[0] * w for p in points]
-    ys = [p[1] * h for p in points]
-    x1, x2 = int(max(0, min(xs))), int(min(w - 1, max(xs)))
-    y1, y2 = int(max(0, min(ys))), int(min(h - 1, max(ys)))
-    if x2 <= x1 or y2 <= y1:
-        return 0, 0, 0, 0
-    return x1, y1, x2, y2
-
-
-def _yolo_box(points: list[list[float]]) -> tuple[float, float, float, float]:
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    x1, x2 = min(xs), max(xs)
-    y1, y2 = min(ys), max(ys)
-    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-    bw, bh = max(1e-6, x2 - x1), max(1e-6, y2 - y1)
-    return cx, cy, bw, bh
-
-
-def _class_id(status: str) -> int | None:
-    """CNN 점유 분류용. YOLO 면 발견은 이 값을 쓰지 않는다."""
-    s = (status or "").strip().lower()
-    if s in OCC_POS or s == "occupied":
-        return 1
-    if s in OCC_NEG or s in {"empty", "not occupied"}:
-        return 0
-    return None
 
 
 def _is_parking_space(polygon: dict) -> bool:
@@ -130,61 +101,50 @@ def _load_local_annotations() -> list[dict]:
     return items
 
 
+def _load_huggingface(skip_paths: set[str], log) -> list[dict]:
+    """PKLot samples.json에 있는 사진을 빠짐없이 읽는다."""
+    if not SAMPLES_JSON.is_file():
+        log(f"[데이터] 허깅페이스 samples.json 없음: {SAMPLES_JSON}")
+        return []
+
+    log(f"[데이터] 허깅페이스 목록 읽는 중…")
+    raw = json.loads(SAMPLES_JSON.read_text(encoding="utf-8"))
+    samples = raw["samples"] if isinstance(raw, dict) else raw
+    base = SAMPLES_JSON.parent
+    items = []
+    total = len(samples)
+    for index, sample in enumerate(samples, start=1):
+        if index == 1 or index % 2000 == 0 or index == total:
+            log(f"[데이터] 허깅페이스 확인 {index}/{total}")
+        filepath = sample.get("filepath") or ""
+        path = base / filepath
+        if not path.is_file():
+            path = DATA_DIR / filepath
+        if not path.is_file() or str(path) in skip_paths:
+            continue
+        try:
+            rel = path.relative_to(DATA_DIR).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        item = _item_from_polygons(rel, polygons_from_annotation(sample))
+        if item:
+            items.append(item)
+    log(f"[데이터] 허깅페이스 {len(items)}장")
+    return items
+
+
 def collect_samples(log) -> list[dict]:
     local = _load_local_annotations()
-    log(f"[데이터] 색인된 사진 전부 사용: {len(local)}장 (허깅페이스 제외)")
-    return local
-
-
-def build_cnn_crops(log) -> Path:
-    samples = collect_samples(log)
-    if not samples:
-        raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
-
-    if CNN_DATA.exists():
-        shutil.rmtree(CNN_DATA)
-    for split in ("train", "val"):
-        for cls in ("empty", "occupied"):
-            (CNN_DATA / split / cls).mkdir(parents=True, exist_ok=True)
-
-    random.seed(42)
-    random.shuffle(samples)
-    n_val = max(1, int(len(samples) * 0.2))
-    val_set = set(id(s) for s in samples[:n_val])
-
-    counts = {"train": 0, "val": 0}
-    for s in samples:
-        split = "val" if id(s) in val_set else "train"
-        img = cv2.imread(str(s["path"]))
-        if img is None:
-            continue
-        h, w = img.shape[:2]
-        for i, poly in enumerate(s["polygons"]):
-            cid = _class_id(poly["status"])
-            if cid is None:
-                continue
-            cls = "occupied" if cid == 1 else "empty"
-            x1, y1, x2, y2 = _bbox_from_points(poly["points"], w, h)
-            if x2 - x1 < 8 or y2 - y1 < 8:
-                continue
-            crop = img[y1:y2, x1:x2]
-            if crop.size == 0:
-                continue
-            out = CNN_DATA / split / cls / f"{Path(s['rel']).stem}_{i}.jpg"
-            cv2.imwrite(str(out), crop)
-            counts[split] += 1
-
-    log(f"[CNN 데이터] train crops={counts['train']}, val crops={counts['val']}")
-    log(f"[CNN 데이터] 경로: {CNN_DATA}")
-    if counts["train"] < 10:
-        raise RuntimeError("CNN crop이 너무 적습니다. 점유가 표시된 색인을 추가하세요.")
-    return CNN_DATA
+    log(f"[데이터] 로컬 색인 {len(local)}장")
+    huggingface = _load_huggingface({str(item["path"]) for item in local}, log)
+    log(f"[데이터] 합계 {len(local) + len(huggingface)}장 (로컬 {len(local)} + 허깅페이스 {len(huggingface)})")
+    return local + huggingface
 
 
 def build_yolo_dataset(log) -> Path:
     samples = collect_samples(log)
     if not samples:
-        raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
+        raise RuntimeError("학습용 이미지가 없습니다. 색인 또는 허깅페이스 PKLot를 확인하세요.")
 
     if YOLO_DATA.exists():
         shutil.rmtree(YOLO_DATA)
