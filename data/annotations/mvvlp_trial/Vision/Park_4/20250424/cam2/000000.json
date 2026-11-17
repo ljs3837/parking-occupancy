@@ -1,0 +1,60 @@
+{
+  "image": "mvvlp_trial/Vision/Park_4/20250424/cam2/000000.jpg",
+  "polygons": [
+    {
+      "id": "Park_4_pilot_floor01",
+      "points": [
+        [
+          0.39375,
+          0.6148148148148148
+        ],
+        [
+          0.44895833333333335,
+          0.44074074074074077
+        ],
+        [
+          0.55,
+          0.44074074074074077
+        ],
+        [
+          0.6052083333333333,
+          0.6240740740740741
+        ]
+      ],
+      "tags": [
+        "empty"
+      ],
+      "label": "parking_space"
+    },
+    {
+      "id": "Park_4_pilot_left_neighbor",
+      "points": [
+        [
+          0.14895833333333333,
+          0.5888888888888889
+        ],
+        [
+          0.303125,
+          0.44074074074074077
+        ],
+        [
+          0.44895833333333335,
+          0.44074074074074077
+        ],
+        [
+          0.39375,
+          0.6148148148148148
+        ]
+      ],
+      "tags": [
+        "occupied"
+      ],
+      "label": "parking_space"
+    }
+  ],
+  "meta": {
+    "experiment": "MVVLP pilot",
+    "source_parking_id_mapping": "not established",
+    "labels": "predicted"
+  }
+}

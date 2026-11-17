@@ -114,7 +114,8 @@ def polygons_from_annotation(data) -> list[dict]:
 
 
 def load_annotation(rel: str) -> list[dict]:
-    return _read_image_polygons(rel)
+    current = _read_image_polygons(rel)
+    return polygons_from_folder_layout(rel, current) or current
 
 
 def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> list[dict]:
@@ -149,7 +150,13 @@ def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> 
 
 
 def _shares_polygons(rel: str) -> bool:
-    return Path(rel).as_posix().startswith("cctv_image/")
+    parts = Path(rel).parts
+    if len(parts) < 2:
+        return False
+    root = parts[0]
+    return root == "cctv_image" or (
+        root.startswith("camera") and root[len("camera"):].isdigit()
+    )
 
 
 def _layout_path(rel: str) -> Path:
@@ -166,6 +173,15 @@ def _read_image_polygons(rel: str) -> list[dict]:
 def _read_layout(rel: str) -> list[dict]:
     path = _layout_path(rel)
     if not path.is_file():
+        # Older annotations predate shared layouts. Reuse a saved image in
+        # this exact folder, without mixing layouts from other cameras.
+        for candidate in sorted(path.parent.glob("*.json")):
+            if candidate.name.startswith("_"):
+                continue
+            image_rel = Path(rel).parent / candidate.with_suffix(".jpg").name
+            polygons = _read_image_polygons(image_rel.as_posix())
+            if polygons:
+                return polygons
         return []
     data = json.loads(path.read_text(encoding="utf-8"))
     polygons = []
