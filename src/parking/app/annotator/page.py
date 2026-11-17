@@ -154,7 +154,10 @@ class AnnotatorPage(QWidget):
         self._updating_poly_list = False
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
-        hint = QLabel("폴더 칸 적용으로 같은 폴더 칸을 가져옴 · 기본은 차 없음 · E 로 상태 전환")
+        hint = QLabel(
+            "폴더 칸 적용으로 같은 폴더 칸을 가져옴 · 기본은 차 없음 · E 로 상태 전환 · "
+            "그리기 중 Ctrl을 누르면 가까운 꼭짓점에 붙음"
+        )
         hint.setWordWrap(True)
         side_layout.addWidget(hint)
         tag_row = QHBoxLayout()
