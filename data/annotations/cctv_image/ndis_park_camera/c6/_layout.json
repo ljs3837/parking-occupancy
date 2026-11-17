@@ -21,7 +21,8 @@
           0.3886941236536716
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_ff4babd6",
@@ -43,7 +44,8 @@
           0.21522054289370143
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_06a024c0",
@@ -65,7 +67,8 @@
           0.10908053546840168
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_7af93525",
@@ -91,7 +94,8 @@
           0.8287888461025803
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_e8bab9aa",
@@ -113,7 +117,8 @@
           0.41067868539275215
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     }
   ]
 }

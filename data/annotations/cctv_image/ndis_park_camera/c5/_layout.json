@@ -21,7 +21,8 @@
           0.11210765
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_02",
@@ -43,7 +44,8 @@
           0.17135876
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_03",
@@ -65,7 +67,8 @@
           0.21108206
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_04",
@@ -87,7 +90,8 @@
           0.24160242
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_05",
@@ -109,7 +113,8 @@
           0.24203607
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_06",
@@ -131,7 +136,8 @@
           0.20742015
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_07",
@@ -153,7 +159,8 @@
           0.16111646
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_08",
@@ -175,7 +182,8 @@
           0.13229626
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_09",
@@ -197,7 +205,8 @@
           0.98884912
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "c5_first_10",
@@ -219,7 +228,8 @@
           0.98728661
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     }
   ]
 }

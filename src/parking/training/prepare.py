@@ -9,8 +9,8 @@ from pathlib import Path
 
 import cv2
 
-from parking.app.annotator.io import flat_points, load_annotation, polygons_from_annotation
-from parking.app.paths import ANNOT_DIR, DATA_DIR, ROOT
+from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
+from parking.app.paths import DATA_DIR, ROOT
 
 SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
 
@@ -124,16 +124,10 @@ def _item_from_polygons(rel: str, polygons: list[dict]) -> dict | None:
 
 
 def _load_local_annotations() -> list[dict]:
-    """우리 색인 JSON → [{path, polygons}]"""
+    """우리 색인 JSON → [{path, polygons}]. 공유 폴더는 사진마다 같은 칸을 쓴다."""
     items = []
-    if not ANNOT_DIR.exists():
-        return items
-    for jp in ANNOT_DIR.rglob("*.json"):
-        if jp.name == "_layout.json":
-            continue
-        data = json.loads(jp.read_text(encoding="utf-8"))
-        rel = data.get("filepath") or data.get("image") or jp.relative_to(ANNOT_DIR).with_suffix(".jpg").as_posix()
-        item = _item_from_polygons(rel, load_annotation(rel))
+    for rel, polygons in iter_annotation_sources():
+        item = _item_from_polygons(rel, polygons)
         if item:
             items.append(item)
     return items

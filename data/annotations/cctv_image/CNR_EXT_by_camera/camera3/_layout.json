@@ -21,7 +21,8 @@
           0.24980097805072213
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_f1b71c2d",
@@ -43,7 +44,8 @@
           0.26259524621858293
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_ec8b4128",
@@ -65,7 +67,8 @@
           0.27823268509041277
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_81cba82c",
@@ -87,7 +90,8 @@
           0.28818378255430455
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_cc60dc84",
@@ -109,7 +113,8 @@
           0.3009780507221653
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_deb54d39",
@@ -131,7 +136,8 @@
           0.18156488115546454
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_e99de5fe",
@@ -153,7 +159,8 @@
           0.20004549073126346
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_899dce2b",
@@ -175,7 +182,8 @@
           0.10053451609234615
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_f5e7f58b",
@@ -197,7 +205,8 @@
           0.09342658933242348
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_beb310c8",
@@ -219,7 +228,8 @@
           0.07921073581257815
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_a115b0ed",
@@ -241,7 +251,8 @@
           0.06641646764471734
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_2e2a2751",
@@ -263,7 +274,8 @@
           0.5554418287273968
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_8b30efe7",
@@ -285,7 +297,8 @@
           0.5597065847833503
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_ace26813",
@@ -307,7 +320,8 @@
           0.5213237802797679
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_520cc153",
@@ -329,7 +343,8 @@
           0.46588195155237117
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_70c4e07f",
@@ -351,7 +366,8 @@
           0.4630387808484021
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     },
     {
       "id": "p_2a07f768",
@@ -373,7 +389,8 @@
           0.4516660980325259
         ]
       ],
-      "label": "parking_space"
+      "label": "parking_space",
+      "occupancy_status": "not occupied"
     }
   ]
 }

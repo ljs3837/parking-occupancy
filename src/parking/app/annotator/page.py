@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    _shares_polygons, annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation,
+    _shares_polygons, annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -155,7 +155,7 @@ class AnnotatorPage(QWidget):
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
         hint = QLabel(
-            "같은 폴더 칸 자동 적용 · 기본은 차 없음 · E 로 상태 전환 · "
+            "같은 폴더 사진은 색인 JSON 하나를 공유 · E 로 상태 전환 · "
             "그리기 중 Ctrl을 누르면 가까운 꼭짓점에 붙음 · "
             "Backspace: 마지막 점 취소 · Esc: 전체 취소"
         )
@@ -411,7 +411,7 @@ class AnnotatorPage(QWidget):
             self.status_message.emit(f"삭제 실패: {exc}")
             return
         ann = annot_path(Path(rel))
-        if ann.is_file():
+        if ann.is_file() and not shares_folder_annotation(rel):
             try:
                 ann.unlink()
             except OSError:
