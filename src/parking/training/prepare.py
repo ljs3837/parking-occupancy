@@ -1,18 +1,15 @@
-"""어노테이션·PKLot → CNN crop / YOLO 데이터셋 변환."""
+"""로컬 색인 → CNN crop / YOLO 데이터셋 변환."""
 
 from __future__ import annotations
 
-import json
 import random
 import shutil
 from pathlib import Path
 
 import cv2
 
-from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
+from parking.app.annotator.io import flat_points, iter_annotation_sources
 from parking.app.paths import DATA_DIR, ROOT
-
-SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
@@ -133,74 +130,20 @@ def _load_local_annotations() -> list[dict]:
     return items
 
 
-def _sample_budgets(n_local: int, max_images: int) -> tuple[int, int]:
-    """로컬 색인과 samples.json이 같이 들어가도록 장수를 나눈다."""
-    if max_images <= 0:
-        return 0, 0
-    if n_local <= 0:
-        return 0, max_images
-    pklot_slots = max(1, max_images // 2)
-    local_slots = max_images - pklot_slots
-    if n_local < local_slots:
-        pklot_slots += local_slots - n_local
-        local_slots = n_local
-    return local_slots, pklot_slots
-
-
-def _load_samples_json(limit: int, skip_paths: set[str], log) -> list[dict]:
-    if limit <= 0:
-        return []
-    if not SAMPLES_JSON.is_file():
-        log(f"[데이터] samples.json 없음: {SAMPLES_JSON}")
-        return []
-
-    log(f"[데이터] samples.json 로드 중… ({SAMPLES_JSON})")
-    raw = json.loads(SAMPLES_JSON.read_text(encoding="utf-8"))
-    samples = raw["samples"] if isinstance(raw, dict) else raw
-    base = SAMPLES_JSON.parent
-    candidates = []
-    for sample in samples:
-        filepath = sample.get("filepath") or ""
-        path = base / filepath
-        if not path.is_file():
-            path = DATA_DIR / filepath
-        if not path.is_file() or str(path) in skip_paths:
-            continue
-        candidates.append((sample, path))
-    random.seed(42)
-    if len(candidates) > limit:
-        candidates = random.sample(candidates, limit)
-
-    items = []
-    for sample, path in candidates:
-        try:
-            rel = path.relative_to(DATA_DIR).as_posix()
-        except ValueError:
-            rel = path.name
-        item = _item_from_polygons(rel, polygons_from_annotation(sample))
-        if item:
-            items.append(item)
-    log(f"[데이터] samples.json에서 {len(items)}장 사용")
-    return items
-
-
 def collect_samples(max_images: int, log) -> list[dict]:
     local = _load_local_annotations()
     log(f"[데이터] 로컬 색인 이미지: {len(local)}")
-    local_slots, pklot_slots = _sample_budgets(len(local), max_images)
-    if len(local) > local_slots:
+    if max_images > 0 and len(local) > max_images:
         random.seed(42)
-        local = random.sample(local, local_slots)
-    skip_paths = {str(item["path"]) for item in local}
-    pklot = _load_samples_json(pklot_slots, skip_paths, log)
-    log(f"[데이터] 합계 {len(local) + len(pklot)}장 (로컬 {len(local)} + samples.json {len(pklot)})")
-    return local + pklot
+        local = random.sample(local, max_images)
+    log(f"[데이터] 학습에 사용: {len(local)}장 (허깅페이스 제외)")
+    return local
 
 
 def build_cnn_crops(max_images: int, log) -> Path:
     samples = collect_samples(max_images, log)
     if not samples:
-        raise RuntimeError("학습용 이미지가 없습니다. 색인을 하거나 PKLot를 준비하세요.")
+        raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
 
     if CNN_DATA.exists():
         shutil.rmtree(CNN_DATA)
@@ -245,7 +188,7 @@ def build_cnn_crops(max_images: int, log) -> Path:
 def build_yolo_dataset(max_images: int, log) -> Path:
     samples = collect_samples(max_images, log)
     if not samples:
-        raise RuntimeError("학습용 이미지가 없습니다. 색인을 하거나 PKLot를 준비하세요.")
+        raise RuntimeError("학습용 이미지가 없습니다. data/annotations 색인을 먼저 준비하세요.")
 
     if YOLO_DATA.exists():
         shutil.rmtree(YOLO_DATA)

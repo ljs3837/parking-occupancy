@@ -133,7 +133,7 @@ class TrainPage(QWidget):
 
         desc = QLabel(
             "주차칸 라벨(칸 좌표 + 점유여부)로 두 가지 모델을 학습합니다. "
-            "우리 색인(`data/annotations`)과 PKLot `samples.json`을 함께 사용합니다."
+            "우리 색인(`data/annotations`)만 사용하고 허깅페이스 데이터는 넣지 않습니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")

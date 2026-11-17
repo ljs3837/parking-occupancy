@@ -17,8 +17,8 @@ dist/
 !/data/observe/
 !/data/observe/.gitkeep
 !/data/annotations/
-/models/*
-!/models/README.md
+# 학습 로그·그림·best/last 복사본. 앱이 읽는 models/*/*.pt 는 포함
+/models/_runs/
 /outputs/*
 !/outputs/README.md
 # Editor / OS
