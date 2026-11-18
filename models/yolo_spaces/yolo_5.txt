@@ -1,0 +1,9 @@
+{
+  "task": "segment",
+  "source_run": "C:\\Users\\user1\\Desktop\\parking\\models\\_runs\\roi_yolo_5",
+  "dataset": "C:\\Users\\user1\\Desktop\\parking\\outputs\\train\\line_improvement\\dataset_v3\\segment\\data.yaml",
+  "inference_imgsz": 640,
+  "tiled": false,
+  "epochs": 25,
+  "notes": "Experimental ROI/extra-camera model; selection pending identical validation comparison"
+}

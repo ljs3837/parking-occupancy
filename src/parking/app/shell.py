@@ -112,6 +112,8 @@ class AppShell(QMainWindow):
             self.model_list.addItem(item)
             if model["label"] == current_label or (not current_label and model["kind"] == "occupancy"):
                 chosen = index
+        if not current_label:
+            chosen = next((i for i, model in enumerate(models) if model.get("preferred")), chosen)
         if self.model_list.count():
             self.model_list.setCurrentRow(chosen)
             self.select_model(self.model_list.item(chosen))

@@ -51,3 +51,7 @@ python -m pip list
 ```
 
 패키지 목록은 `requirements.txt`에서 관리하며 버전은 아직 고정하지 않았습니다.
+
+## 주차 칸 탐지 실험
+
+YOLO11s 학습·비교·적용 방법은 [실험 문서](docs/parking-line-experiments.md)를 참고하세요.

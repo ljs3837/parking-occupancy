@@ -121,10 +121,10 @@ class TrainPage(QWidget):
 
         self.yolo_card = ModelCard(
             "YOLO 파인튜닝",
-            "YOLOv8n-seg",
+            "YOLO11s-seg",
             "주차칸 좌표만으로 면을 찾습니다. 차 있음/없음은 학습에 쓰지 않고, 나중에 차량 YOLO로 판정합니다.",
         )
-        self.yolo_card.batch.setValue(8)
+        self.yolo_card.batch.setValue(4)
         self.yolo_card.start_clicked.connect(self._start)
         root.addWidget(self.yolo_card)
 
