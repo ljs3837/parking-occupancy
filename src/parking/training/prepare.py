@@ -1,10 +1,11 @@
-"""로컬 색인과 허깅페이스 PKLot 전부를 YOLO 데이터셋으로 변환."""
+"""로컬 색인, 허깅페이스 PKLot, Kaggle 주차 사진을 YOLO 데이터셋으로 변환."""
 
 from __future__ import annotations
 
 import json
 import random
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
@@ -27,6 +28,9 @@ def next_model_path(directory: Path, stem: str) -> Path:
 
 
 SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
+KAGGLE_DIR = DATA_DIR / "kaggle" / "parking-space-detection"
+KAGGLE_XML = KAGGLE_DIR / "annotations.xml"
+KAGGLE_IMAGES = KAGGLE_DIR / "images"
 YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
@@ -157,12 +161,73 @@ def _load_huggingface(skip_paths: set[str], log) -> list[dict]:
     return items
 
 
+def _polygon_points(raw: str, width: float, height: float) -> list[list[float]]:
+    points = []
+    for pair in raw.split(";"):
+        if "," not in pair:
+            continue
+        x_text, y_text = pair.split(",", 1)
+        try:
+            x = float(x_text) / width
+            y = float(y_text) / height
+        except ValueError:
+            continue
+        points.append([min(1.0, max(0.0, x)), min(1.0, max(0.0, y))])
+    return points
+
+
+def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
+    """원본 사진과 XML 칸 좌표만 읽는다. 선이 그려진 boxes 이미지는 쓰지 않는다."""
+    if not KAGGLE_XML.is_file() or not KAGGLE_IMAGES.is_dir():
+        log(f"[데이터] Kaggle 주차 데이터 없음: {KAGGLE_DIR}")
+        return []
+
+    root = ET.parse(KAGGLE_XML).getroot()
+    items = []
+    for image in root.iter("image"):
+        name = Path(image.get("name") or "").name
+        path = KAGGLE_IMAGES / name
+        if not name or not path.is_file() or str(path) in skip_paths:
+            continue
+        width = float(image.get("width") or 0)
+        height = float(image.get("height") or 0)
+        if width <= 0 or height <= 0:
+            continue
+        polygons = []
+        for polygon in image.findall("polygon"):
+            points = _polygon_points(polygon.get("points") or "", width, height)
+            if len(points) < 3:
+                continue
+            polygons.append(
+                {
+                    "points": points,
+                    "status": "unknown",
+                    "label": "parking_space",
+                }
+            )
+        if not polygons:
+            continue
+        try:
+            rel = path.relative_to(DATA_DIR).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        items.append({"rel": rel, "path": path, "polygons": polygons})
+    log(f"[데이터] Kaggle 주차 원본 {len(items)}장")
+    return items
+
+
 def collect_samples(log) -> list[dict]:
     local = _load_local_annotations()
     log(f"[데이터] 로컬 색인 {len(local)}장")
-    huggingface = _load_huggingface({str(item["path"]) for item in local}, log)
-    log(f"[데이터] 합계 {len(local) + len(huggingface)}장 (로컬 {len(local)} + 허깅페이스 {len(huggingface)})")
-    return local + huggingface
+    skip = {str(item["path"]) for item in local}
+    huggingface = _load_huggingface(skip, log)
+    kaggle = _load_kaggle_parking(skip | {str(item["path"]) for item in huggingface}, log)
+    total = len(local) + len(huggingface) + len(kaggle)
+    log(
+        f"[데이터] 합계 {total}장 "
+        f"(로컬 {len(local)} + 허깅페이스 {len(huggingface)} + Kaggle {len(kaggle)})"
+    )
+    return local + huggingface + kaggle
 
 
 def build_yolo_dataset(log) -> Path:

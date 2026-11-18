@@ -139,7 +139,7 @@ class TrainPage(QWidget):
         root.addWidget(title)
 
         desc = QLabel(
-            "주차칸 YOLO를 학습합니다. 우리 색인과 허깅페이스 PKLot 사진을 전부 사용합니다."
+            "주차칸 YOLO를 학습합니다. 우리 색인, 허깅페이스 PKLot, Kaggle 원본 사진을 사용합니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")
@@ -181,7 +181,7 @@ class TrainPage(QWidget):
         epochs, batch, model_name = self.yolo_card.params()
         self.log.clear()
         self._append(
-            f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, 로컬+허깅페이스 전부) ==="
+            f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, 로컬+허깅페이스+Kaggle) ==="
         )
         self.worker = TrainWorker("yolo", epochs, batch, model_name)
         self.worker.log.connect(self._append)
