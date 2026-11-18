@@ -9,23 +9,26 @@ from parking.common.device import device_label, use_amp, yolo_device
 from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
+# 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
+ROTATION_DEGREES = 15.0
 
 
 def train_yolo(
     *,
     epochs: int = 5,
-    batch: int = 8,
+    batch: int = 4,
     imgsz: int = 640,
-    model_name: str = "yolov8n-seg.pt",
+    model_name: str = "yolo11s-seg.pt",
+    data_yaml: Path | None = None,
     log=print,
     should_stop=None,
 ) -> Path:
     device = yolo_device()
     amp = use_amp(device)
     log(f"[YOLO] device={device_label()}  amp={amp}")
-    yaml_path = build_yolo_dataset(log)
+    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log)
     log(f"[YOLO] data={yaml_path}")
-    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}")
+    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
 
     if should_stop and should_stop():
         raise RuntimeError("학습 시작 전 중지됨")
@@ -48,6 +51,7 @@ def train_yolo(
         workers=0,
         device=device,
         amp=amp,
+        degrees=ROTATION_DEGREES,
         patience=max(3, epochs),
     )
 

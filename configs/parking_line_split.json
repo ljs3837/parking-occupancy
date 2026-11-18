@@ -1,0 +1,15 @@
+{
+  "validation_images": [
+    "cctv/jongsu/l5.jpg",
+    "cctv/jongsu/ㅣ10.jpg",
+    "cctv/jongsu/ㅣ19.jpg",
+    "cctv/jongsu/ㅣ9.jpg"
+  ],
+  "heldout_camera_groups": [
+    "cctv_image/CNR_EXT_by_camera/camera4",
+    "cctv_image/ndis_park_camera/c3",
+    "cctv_image/ndis_park_camera/c9"
+  ],
+  "note": "Four-image validation reuses yolo_4 split. Heldout camera representatives are excluded from training because some boundary polygons are not complete quadrilaterals; assess separately without retuning.",
+  "source_prefix": "cctv/jongsu/"
+}

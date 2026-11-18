@@ -1,14 +1,16 @@
-"""로컬 색인과 허깅페이스 PKLot 전부를 YOLO 데이터셋으로 변환."""
+"""로컬 색인, 허깅페이스 PKLot, Kaggle 주차 사진을 YOLO 데이터셋으로 변환."""
 
 from __future__ import annotations
 
 import json
 import random
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
 from parking.app.paths import DATA_DIR, ROOT
+from parking.training.occlusion import occlude_slots
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
@@ -27,10 +29,39 @@ def next_model_path(directory: Path, stem: str) -> Path:
 
 
 SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
+KAGGLE_DIR = DATA_DIR / "kaggle" / "parking-space-detection"
+KAGGLE_XML = KAGGLE_DIR / "annotations.xml"
+KAGGLE_IMAGES = KAGGLE_DIR / "images"
 YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
 OCC_NEG = {"empty", "not occupied"}
+# data/cctv 인간 색인은 주차장이 제각각이라, 학습 세트에서만 이 횟수만큼 반복한다.
+CCTV_TRAIN_REPEAT = 10
+
+
+def _is_human_cctv(sample: dict) -> bool:
+    return str(sample.get("rel") or "").startswith("cctv/")
+
+
+def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
+    """검증은 원본 1장. cctv 인간 색인만 학습 쪽에서 반복한다."""
+    if cctv_repeat < 1:
+        raise ValueError("cctv_repeat must be at least one")
+    random.seed(42)
+    random.shuffle(samples)
+    n_val = max(1, int(len(samples) * 0.2))
+    rows: list[tuple[str, dict]] = []
+    cctv_train = 0
+    for index, sample in enumerate(samples):
+        if index < n_val:
+            rows.append(("val", sample))
+            continue
+        repeats = cctv_repeat if _is_human_cctv(sample) else 1
+        if _is_human_cctv(sample):
+            cctv_train += 1
+        rows.extend(("train", sample) for _ in range(repeats))
+    return rows, cctv_train, n_val
 
 
 def _norm_points(points) -> list[list[float]]:
@@ -133,36 +164,98 @@ def _load_huggingface(skip_paths: set[str], log) -> list[dict]:
     return items
 
 
+def _polygon_points(raw: str, width: float, height: float) -> list[list[float]]:
+    points = []
+    for pair in raw.split(";"):
+        if "," not in pair:
+            continue
+        x_text, y_text = pair.split(",", 1)
+        try:
+            x = float(x_text) / width
+            y = float(y_text) / height
+        except ValueError:
+            continue
+        points.append([min(1.0, max(0.0, x)), min(1.0, max(0.0, y))])
+    return points
+
+
+def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
+    """원본 사진과 XML 칸 좌표만 읽는다. 선이 그려진 boxes 이미지는 쓰지 않는다."""
+    if not KAGGLE_XML.is_file() or not KAGGLE_IMAGES.is_dir():
+        log(f"[데이터] Kaggle 주차 데이터 없음: {KAGGLE_DIR}")
+        return []
+
+    root = ET.parse(KAGGLE_XML).getroot()
+    items = []
+    for image in root.iter("image"):
+        name = Path(image.get("name") or "").name
+        path = KAGGLE_IMAGES / name
+        if not name or not path.is_file() or str(path) in skip_paths:
+            continue
+        width = float(image.get("width") or 0)
+        height = float(image.get("height") or 0)
+        if width <= 0 or height <= 0:
+            continue
+        polygons = []
+        for polygon in image.findall("polygon"):
+            points = _polygon_points(polygon.get("points") or "", width, height)
+            if len(points) < 3:
+                continue
+            polygons.append(
+                {
+                    "points": points,
+                    "status": "unknown",
+                    "label": "parking_space",
+                }
+            )
+        if not polygons:
+            continue
+        try:
+            rel = path.relative_to(DATA_DIR).as_posix()
+        except ValueError:
+            rel = path.as_posix()
+        items.append({"rel": rel, "path": path, "polygons": polygons})
+    log(f"[데이터] Kaggle 주차 원본 {len(items)}장")
+    return items
+
+
 def collect_samples(log) -> list[dict]:
     local = _load_local_annotations()
     log(f"[데이터] 로컬 색인 {len(local)}장")
-    huggingface = _load_huggingface({str(item["path"]) for item in local}, log)
-    log(f"[데이터] 합계 {len(local) + len(huggingface)}장 (로컬 {len(local)} + 허깅페이스 {len(huggingface)})")
-    return local + huggingface
+    skip = {str(item["path"]) for item in local}
+    huggingface = _load_huggingface(skip, log)
+    kaggle = _load_kaggle_parking(skip | {str(item["path"]) for item in huggingface}, log)
+    total = len(local) + len(huggingface) + len(kaggle)
+    log(
+        f"[데이터] 합계 {total}장 "
+        f"(로컬 {len(local)} + 허깅페이스 {len(huggingface)} + Kaggle {len(kaggle)})"
+    )
+    return local + huggingface + kaggle
 
 
-def build_yolo_dataset(log) -> Path:
-    samples = collect_samples(log)
+def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT) -> Path:
+    samples = list(collect_samples(log) if samples is None else samples)
+    data_dir = (Path(output_dir) if output_dir is not None else YOLO_DATA).resolve()
+    run_root = RUNS_DIR.resolve()
+    if data_dir == run_root or not data_dir.is_relative_to(run_root):
+        raise ValueError("Dataset output must be a subdirectory of outputs/train")
     if not samples:
         raise RuntimeError("학습용 이미지가 없습니다. 색인 또는 허깅페이스 PKLot를 확인하세요.")
 
-    if YOLO_DATA.exists():
-        shutil.rmtree(YOLO_DATA)
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
     for split in ("train", "val"):
-        (YOLO_DATA / "images" / split).mkdir(parents=True, exist_ok=True)
-        (YOLO_DATA / "labels" / split).mkdir(parents=True, exist_ok=True)
+        (data_dir / "images" / split).mkdir(parents=True, exist_ok=True)
+        (data_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    random.seed(42)
-    random.shuffle(samples)
-    n_val = max(1, int(len(samples) * 0.2))
-    val_set = set(id(s) for s in samples[:n_val])
+    rows, cctv_train, n_val = _split_rows(samples, cctv_repeat=cctv_repeat)
 
     n_img = 0
-    for s in samples:
-        split = "val" if id(s) in val_set else "train"
+    n_occluded = 0
+    for split, s in rows:
         src = Path(s["path"])
         stem = f"{src.stem}_{n_img}"
-        dst_img = YOLO_DATA / "images" / split / f"{stem}{src.suffix.lower()}"
+        dst_img = data_dir / "images" / split / f"{stem}{src.suffix.lower()}"
         shutil.copy2(src, dst_img)
 
         lines = []
@@ -180,17 +273,36 @@ def build_yolo_dataset(log) -> Path:
         if not lines:
             dst_img.unlink(missing_ok=True)
             continue
-        (YOLO_DATA / "labels" / split / f"{stem}.txt").write_text(
+        (data_dir / "labels" / split / f"{stem}.txt").write_text(
             "\n".join(lines) + "\n",
             encoding="utf-8",
         )
+        # Augment train only, after splitting: no augmented validation leakage.
+        if split == "train":
+            import cv2
+            import numpy as np
+
+            image = cv2.imdecode(np.fromfile(str(src), dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is not None:
+                augmented, changed = occlude_slots(image, s["polygons"], seed=42 + n_img)
+                if changed:
+                    augmented_path = dst_img.with_name(f"{stem}_occluded.jpg")
+                    ok, encoded = cv2.imencode(".jpg", augmented)
+                    if not ok:
+                        raise RuntimeError(f"Could not encode {augmented_path}")
+                    encoded.tofile(str(augmented_path))
+                    (data_dir / "labels" / split / f"{stem}_occluded.txt").write_text(
+                        "\n".join(lines) + "\n", encoding="utf-8"
+                    )
+                    n_occluded += 1
         n_img += 1
 
-    yaml_path = YOLO_DATA / "data.yaml"
+    log(f"[YOLO] synthetic partial occlusion: {n_occluded} train images; full labels retained")
+    yaml_path = data_dir / "data.yaml"
     yaml_path.write_text(
         "\n".join(
             [
-                f"path: {YOLO_DATA.as_posix()}",
+                f"path: {data_dir.as_posix()}",
                 "train: images/train",
                 "val: images/val",
                 "names:",
@@ -200,5 +312,9 @@ def build_yolo_dataset(log) -> Path:
         ),
         encoding="utf-8",
     )
-    log(f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장 → {YOLO_DATA}")
+    log(
+        f"[YOLO 데이터] 주차칸 좌표 · 이미지 {n_img}장"
+        f" · CCTV 학습 원본 {cctv_train}장 × {cctv_repeat}"
+        f" · 검증 원본 {n_val}장 → {data_dir}"
+    )
     return yaml_path

@@ -1,0 +1,8 @@
+{
+  "task": "segment",
+  "original_local_name": "yolo_4.pt",
+  "sha256": "11181dca11f4995645ad92a57fb9b7a068212516538ce0178714d4061d9573d6",
+  "inference_imgsz": 640,
+  "tiled": false,
+  "notes": "Preserved local baseline separately from the different yolo_4.pt added on remote main"
+}

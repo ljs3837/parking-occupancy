@@ -1,0 +1,556 @@
+{
+  "records": [
+    {
+      "source": "cctv/jongsu/l1.jpg",
+      "split": "train",
+      "source_sha256": "4fd8ca222fa93b51af381fa286531b3f103cc1d035ae1a6fba2b1d64b7999c16",
+      "roi_bounds": [
+        0,
+        66,
+        521,
+        325
+      ],
+      "variants": [
+        "source_000_roi",
+        "source_000_occluded"
+      ],
+      "slots": 19,
+      "original_source": "cctv/l1.jpg"
+    },
+    {
+      "source": "cctv/jongsu/l2.jpg",
+      "split": "train",
+      "source_sha256": "250e7e4e035581d8f38d0872702f5ca187bf4e9ac10baf406cd082a7089df8d0",
+      "roi_bounds": [
+        0,
+        87,
+        482,
+        268
+      ],
+      "variants": [
+        "source_001_roi",
+        "source_001_occluded"
+      ],
+      "slots": 4,
+      "original_source": "cctv/l2.jpg"
+    },
+    {
+      "source": "cctv/jongsu/l3.jpg",
+      "split": "train",
+      "source_sha256": "f33129d9544861e7a2d1770b32d89e9ba6643de0ecc0dada70b043cb326463de",
+      "roi_bounds": [
+        0,
+        139,
+        545,
+        366
+      ],
+      "variants": [
+        "source_002_roi",
+        "source_002_occluded"
+      ],
+      "slots": 52,
+      "original_source": "cctv/l3.jpg"
+    },
+    {
+      "source": "cctv/jongsu/l4.jpg",
+      "split": "train",
+      "source_sha256": "83a40fdd8b48e2863fcd6a74a2318105d8c5fc3f1ca5e889844d199a57920953",
+      "roi_bounds": [
+        0,
+        89,
+        738,
+        361
+      ],
+      "variants": [
+        "source_003_roi",
+        "source_003_occluded"
+      ],
+      "slots": 43,
+      "original_source": "cctv/l4.jpg"
+    },
+    {
+      "source": "cctv/jongsu/l5.jpg",
+      "split": "val",
+      "source_sha256": "5ecefe1304c55882728365ca14bb36424a0e8255745fae073c82f63dba8d9d72",
+      "variants": [
+        "source_004"
+      ],
+      "slots": 24,
+      "original_source": "cctv/l5.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ10.jpg",
+      "split": "val",
+      "source_sha256": "e1c7d8482a0eb8e3636620372c8e241c37a39542408d26d1b6f3592592f952bd",
+      "variants": [
+        "source_005"
+      ],
+      "slots": 5,
+      "original_source": "cctv/ㅣ10.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ11.jpg",
+      "split": "train",
+      "source_sha256": "75ff2be0d656b730895d1cefe0d500c91996055e344267c95f2fbbb956254ae3",
+      "roi_bounds": [
+        0,
+        0,
+        457,
+        125
+      ],
+      "variants": [
+        "source_006_roi"
+      ],
+      "slots": 5,
+      "original_source": "cctv/ㅣ11.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ12.jpg",
+      "split": "train",
+      "source_sha256": "7438fbb4b485d81097f1ba45ef7714470a2f1565a7e4c972caf409bbfde6c6ba",
+      "roi_bounds": [
+        0,
+        286,
+        246,
+        333
+      ],
+      "variants": [
+        "source_007_roi",
+        "source_007_occluded"
+      ],
+      "slots": 3,
+      "original_source": "cctv/ㅣ12.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ13.jpg",
+      "split": "train",
+      "source_sha256": "ddce648ac6b61d4b47d05fd797153edd59603aa98b6a5dd072b280cb99ffe70b",
+      "roi_bounds": [
+        0,
+        199,
+        503,
+        391
+      ],
+      "variants": [
+        "source_008_roi",
+        "source_008_occluded"
+      ],
+      "slots": 20,
+      "original_source": "cctv/ㅣ13.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ14.jpg",
+      "split": "train",
+      "source_sha256": "8aaab1fd5cf2e4ca8e56c1b7f27e0b4cb3928134654c72a156b9d5d9d43726b2",
+      "roi_bounds": [
+        0,
+        167,
+        547,
+        362
+      ],
+      "variants": [
+        "source_009_roi",
+        "source_009_occluded"
+      ],
+      "slots": 10,
+      "original_source": "cctv/ㅣ14.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ15.jpg",
+      "split": "train",
+      "source_sha256": "62087bb0a1563ce191948ea69aa52825be4f09f8a38049844302fddde1b47a9a",
+      "roi_bounds": [
+        0,
+        121,
+        288,
+        201
+      ],
+      "variants": [
+        "source_010_roi",
+        "source_010_occluded"
+      ],
+      "slots": 4,
+      "original_source": "cctv/ㅣ15.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ16.jpg",
+      "split": "train",
+      "source_sha256": "69ee2a65a4edf0816f5aaf9b57a2ad61dbca7f684ca2448e7dfc47cfd5904de6",
+      "roi_bounds": [
+        0,
+        140,
+        557,
+        205
+      ],
+      "variants": [
+        "source_011_roi"
+      ],
+      "slots": 2,
+      "original_source": "cctv/ㅣ16.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ17.jpg",
+      "split": "train",
+      "source_sha256": "91520af3f5462750862484225c6aaa47285944144462904010b3b8e2a11651a3",
+      "roi_bounds": [
+        85,
+        202,
+        586,
+        375
+      ],
+      "variants": [
+        "source_012_roi"
+      ],
+      "slots": 1,
+      "original_source": "cctv/ㅣ17.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ18.jpg",
+      "split": "train",
+      "source_sha256": "901d335f54019a18216e597c3050fc37d9d399d8199497c06f3ea3de27a406f1",
+      "excluded": "low-resolution image; fewer than 224 pixels on the shorter side",
+      "original_source": "cctv/ㅣ18.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ19.jpg",
+      "split": "val",
+      "source_sha256": "ea62fe3ff2fae754c9a06a4e8ab2fae16bee813ded77b0aa4a7bcab05f3d81d1",
+      "variants": [
+        "source_014"
+      ],
+      "slots": 6,
+      "original_source": "cctv/ㅣ19.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ20.jpg",
+      "split": "train",
+      "source_sha256": "eecf07a59daca03c9f023fd7a41f8a69de572ca7c8917f2139e182e32d12fb76",
+      "roi_bounds": [
+        35,
+        129,
+        513,
+        362
+      ],
+      "variants": [
+        "source_015_roi",
+        "source_015_occluded"
+      ],
+      "slots": 39,
+      "original_source": "cctv/ㅣ20.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ6.jpg",
+      "split": "train",
+      "source_sha256": "271baa1a97dad22b6ac4ba91b23805e63720afb39cb1107a9ee6c4019be6be69",
+      "roi_bounds": [
+        0,
+        0,
+        547,
+        365
+      ],
+      "variants": [
+        "source_016_roi",
+        "source_016_occluded"
+      ],
+      "slots": 24,
+      "original_source": "cctv/ㅣ6.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ7.jpg",
+      "split": "train",
+      "source_sha256": "6512a0f52b63cc736a71fa86b1a9ea39e7d0d0f1d0b0d7d75467e42779950b39",
+      "roi_bounds": [
+        0,
+        233,
+        600,
+        302
+      ],
+      "variants": [
+        "source_017_roi",
+        "source_017_occluded"
+      ],
+      "slots": 3,
+      "original_source": "cctv/ㅣ7.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ8.jpg",
+      "split": "train",
+      "source_sha256": "b549e73b5b0d9813bd9b5f12cf8934b9752cbbe4148f484f8d387af1de4bceab",
+      "excluded": "low-resolution image; fewer than 224 pixels on the shorter side",
+      "original_source": "cctv/ㅣ8.jpg"
+    },
+    {
+      "source": "cctv/jongsu/ㅣ9.jpg",
+      "split": "val",
+      "source_sha256": "9793aec8206b92f6469e30c0350bb21deb86c2f2d83e2075cbe53628263b4d84",
+      "variants": [
+        "source_019"
+      ],
+      "slots": 41,
+      "original_source": "cctv/ㅣ9.jpg"
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera1/2015-12-18_1048.jpg",
+      "split": "train",
+      "source_sha256": "4626391e7db197fef99f7beda8d5384477fef004ca57b77ce6118d46f83ed398",
+      "roi_bounds": [
+        0,
+        4,
+        1000,
+        750
+      ],
+      "variants": [
+        "source_020_roi",
+        "source_020_full",
+        "source_020_occluded"
+      ],
+      "slots": 58
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera2/2015-12-18_1247.jpg",
+      "split": "train",
+      "source_sha256": "a32d8c64f7d1e9a41e68f5f75d4aa234870d3fc9c5dd9b059ff4cdc38e6b4acf",
+      "roi_bounds": [
+        0,
+        6,
+        728,
+        750
+      ],
+      "variants": [
+        "source_021_roi",
+        "source_021_full",
+        "source_021_occluded"
+      ],
+      "slots": 6
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera3/2015-12-18_0948.jpg",
+      "split": "train",
+      "source_sha256": "9e7cc3392c00f17c4c661225f279228e7fd8cf6907d0318506ec5f284edf2b17",
+      "roi_bounds": [
+        0,
+        11,
+        1000,
+        626
+      ],
+      "variants": [
+        "source_022_roi",
+        "source_022_full",
+        "source_022_occluded"
+      ],
+      "slots": 18
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera4/2015-12-18_0851.jpg",
+      "split": "train",
+      "source_sha256": "b929c4dc8267b470e77fd0b65e91de64d70376f785fb50654e6107e18870ca7e",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        5
+      ]
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera5/2015-12-18_0956.jpg",
+      "split": "train",
+      "source_sha256": "50c1466397194d3011d68b57eeb5665c8d2feba3d35bb17d77d607df555d9d65",
+      "roi_bounds": [
+        0,
+        0,
+        1000,
+        610
+      ],
+      "variants": [
+        "source_024_roi",
+        "source_024_full",
+        "source_024_occluded"
+      ],
+      "slots": 44
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera6/2015-12-18_1322.jpg",
+      "split": "train",
+      "source_sha256": "7218612820218acf389793a0df71934ba5e8cc74dfb7e2904fb6d884d99e6e4a",
+      "roi_bounds": [
+        0,
+        2,
+        1000,
+        586
+      ],
+      "variants": [
+        "source_025_roi",
+        "source_025_full",
+        "source_025_occluded"
+      ],
+      "slots": 38
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera7/2015-12-18_0954.jpg",
+      "split": "train",
+      "source_sha256": "c8302c2abe49522b1550a3d36c6363dd6feeb79cbaadd999295edd3d78edd205",
+      "roi_bounds": [
+        0,
+        5,
+        1000,
+        598
+      ],
+      "variants": [
+        "source_026_roi",
+        "source_026_full",
+        "source_026_occluded"
+      ],
+      "slots": 38
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera8/2015-12-18_1011.jpg",
+      "split": "train",
+      "source_sha256": "886b12c08c4fe090c15596488a457549092e9f43b96a6c4ecdb834a933b84097",
+      "roi_bounds": [
+        0,
+        18,
+        1000,
+        595
+      ],
+      "variants": [
+        "source_027_roi",
+        "source_027_full",
+        "source_027_occluded"
+      ],
+      "slots": 37
+    },
+    {
+      "source": "cctv_image/CNR_EXT_by_camera/camera9/2015-12-18_0924.jpg",
+      "split": "train",
+      "source_sha256": "c27837626342ca899ea6969b118ad81db42a047b08cbd86eaef1e5ff54023a4c",
+      "roi_bounds": [
+        0,
+        0,
+        1000,
+        750
+      ],
+      "variants": [
+        "source_028_roi",
+        "source_028_full",
+        "source_028_occluded"
+      ],
+      "slots": 24
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c1/69_1545849059.jpg",
+      "split": "train",
+      "source_sha256": "cd9d061e5b1cc1cad774566d1451f6ada96cfc4528f0cf0278972606c922185a",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        27
+      ]
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c2/73_1544893251.jpg",
+      "split": "train",
+      "source_sha256": "70c4c719c9aa9ce0ce1d3f153eea04a21cb79ef81ddc73b7087b06a9b7fab3e3",
+      "roi_bounds": [
+        0,
+        0,
+        2400,
+        1808
+      ],
+      "variants": [
+        "source_030_roi",
+        "source_030_full",
+        "source_030_occluded"
+      ],
+      "slots": 34
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c3/60_1537725672.jpg",
+      "split": "train",
+      "source_sha256": "598c64b7454505a9946bc52d66c2a151623584b272dca8ad4c1f608f798a183e",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        37
+      ]
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c4/78_1531726215.jpg",
+      "split": "train",
+      "source_sha256": "41be4a53a0c4909e0662abe43319b662a6ac93cc4ac69fab49895415132abd97",
+      "roi_bounds": [
+        0,
+        21,
+        2400,
+        908
+      ],
+      "variants": [
+        "source_032_roi",
+        "source_032_full",
+        "source_032_occluded"
+      ],
+      "slots": 10
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c5/78_1543008619.jpg",
+      "split": "train",
+      "source_sha256": "06823f7cafa7735bd1bc52b6153b1cc81326f95c2efc932eb25b0b7a094db593",
+      "roi_bounds": [
+        0,
+        10,
+        2400,
+        908
+      ],
+      "variants": [
+        "source_033_roi",
+        "source_033_full",
+        "source_033_occluded"
+      ],
+      "slots": 10
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c6/83_1531764013.jpg",
+      "split": "train",
+      "source_sha256": "71037e16b98dddfef5a54fba91b3d307a69da62923c645913a0ad34dee98f626",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        3
+      ]
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c7/62_1537707712.jpg",
+      "split": "train",
+      "source_sha256": "717d0dc04a548868ef4f4402ea07118d7a7da7988b09681aefedbe73a537fed4",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        1,
+        4,
+        5,
+        6,
+        7,
+        23
+      ]
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c8/69_1537358412.jpg",
+      "split": "train",
+      "source_sha256": "0dc158a040fa302b145841d1fabaf26b4bac4aedbd8882374c372169edb5b1ac",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        1
+      ]
+    },
+    {
+      "source": "cctv_image/ndis_park_camera/c9/64_1543014191.jpg",
+      "split": "train",
+      "source_sha256": "78df9fe06fd8e0c07c0d8ec17ace360b09beb0d5f2835e7270846587c399c183",
+      "excluded": "non-quadrilateral/clipped geometry requiring manual review",
+      "polygon_indices": [
+        38
+      ]
+    }
+  ],
+  "validation": "same four original images as yolo_4; no label-guided validation crop",
+  "training": "ROI crops + full extra camera frames + partial occlusion; no new manual line labels",
+  "image_counts": {
+    "train": 58,
+    "val": 4
+  },
+  "extra_camera_groups": 11,
+  "path_migration": "Original experiment image hashes are unchanged; main moved human annotations/images into cctv/jongsu."
+}

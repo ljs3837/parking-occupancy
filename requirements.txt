@@ -14,5 +14,6 @@ tqdm
 PyQt6
 fiftyone
 huggingface-hub>=0.20.0
+kagglehub
 torch
 torchvision
