@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -14,6 +16,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from parking.training.prepare import list_data_folders
 
 # 주차칸 폴리곤 파인튜닝에 쓰는 분할 모델. 값은 Ultralytics 가중치 파일명.
 YOLO_MODELS = (
@@ -33,12 +37,13 @@ class TrainWorker(QThread):
     done = pyqtSignal(str)
     fail = pyqtSignal(str)
 
-    def __init__(self, kind: str, epochs: int, batch: int, model_name: str):
+    def __init__(self, kind: str, epochs: int, batch: int, model_name: str, folders: list[str]):
         super().__init__()
         self.kind = kind
         self.epochs = epochs
         self.batch = batch
         self.model_name = model_name
+        self.folders = folders
         self._stop = False
 
     def request_stop(self):
@@ -58,6 +63,7 @@ class TrainWorker(QThread):
                 epochs=self.epochs,
                 batch=self.batch,
                 model_name=self.model_name,
+                folders=set(self.folders),
                 log=log,
                 should_stop=self._should_stop,
             )
@@ -107,6 +113,14 @@ class ModelCard(QFrame):
         form.addRow("batch", self.batch)
         layout.addLayout(form)
 
+        folder_label = QLabel("data 폴더")
+        folder_label.setStyleSheet("color:#8b9bb0;")
+        layout.addWidget(folder_label)
+        self.folders = QListWidget()
+        self.folders.setMaximumHeight(140)
+        layout.addWidget(self.folders)
+        self.reload_folders()
+
         self.btn = QPushButton("학습 시작")
         self.btn.clicked.connect(self.start_clicked.emit)
         layout.addWidget(self.btn)
@@ -114,6 +128,26 @@ class ModelCard(QFrame):
 
     def _sync_subtitle(self):
         self.subtitle.setText(self.model.currentText())
+
+    def reload_folders(self) -> None:
+        previous = {
+            self.folders.item(index).text(): self.folders.item(index).checkState()
+            for index in range(self.folders.count())
+        }
+        self.folders.clear()
+        for name in list_data_folders():
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(previous.get(name, Qt.CheckState.Checked))
+            self.folders.addItem(item)
+
+    def selected_folders(self) -> list[str]:
+        names = []
+        for index in range(self.folders.count()):
+            item = self.folders.item(index)
+            if item.checkState() == Qt.CheckState.Checked:
+                names.append(item.text())
+        return names
 
     def params(self) -> tuple[int, int, str]:
         return self.epochs.value(), self.batch.value(), str(self.model.currentData())
@@ -123,6 +157,7 @@ class ModelCard(QFrame):
         self.model.setEnabled(not busy)
         self.epochs.setEnabled(not busy)
         self.batch.setEnabled(not busy)
+        self.folders.setEnabled(not busy)
 
 
 class TrainPage(QWidget):
@@ -141,7 +176,7 @@ class TrainPage(QWidget):
         root.addWidget(title)
 
         desc = QLabel(
-            "주차칸 YOLO를 학습합니다. 우리 색인, 허깅페이스 PKLot, Kaggle 원본 사진을 사용합니다."
+            "주차칸 YOLO를 학습합니다. data 폴더는 여러 개 고를 수 있고, 기본은 전체입니다."
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("color:#8b9bb0;")
@@ -181,11 +216,15 @@ class TrainPage(QWidget):
             QMessageBox.information(self, "학습", "이미 학습이 진행 중입니다.")
             return
         epochs, batch, model_name = self.yolo_card.params()
+        folders = self.yolo_card.selected_folders()
+        if not folders:
+            QMessageBox.information(self, "학습", "사용할 data 폴더를 하나 이상 선택하세요.")
+            return
         self.log.clear()
         self._append(
-            f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, 로컬+허깅페이스+Kaggle) ==="
+            f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, folders={', '.join(folders)}) ==="
         )
-        self.worker = TrainWorker("yolo", epochs, batch, model_name)
+        self.worker = TrainWorker("yolo", epochs, batch, model_name, folders)
         self.worker.log.connect(self._append)
         self.worker.done.connect(self._on_done)
         self.worker.fail.connect(self._on_fail)
