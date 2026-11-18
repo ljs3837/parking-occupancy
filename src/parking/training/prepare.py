@@ -32,6 +32,32 @@ YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
 OCC_NEG = {"empty", "not occupied"}
+# data/cctv 인간 색인은 주차장이 제각각이라, 학습 세트에서만 이 횟수만큼 반복한다.
+CCTV_TRAIN_REPEAT = 10
+
+
+def _is_human_cctv(sample: dict) -> bool:
+    return str(sample.get("rel") or "").startswith("cctv/")
+
+
+def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
+    """검증은 원본 1장. cctv 인간 색인만 학습 쪽에서 반복한다."""
+    if cctv_repeat < 1:
+        raise ValueError("cctv_repeat must be at least one")
+    random.seed(42)
+    random.shuffle(samples)
+    n_val = max(1, int(len(samples) * 0.2))
+    rows: list[tuple[str, dict]] = []
+    cctv_train = 0
+    for index, sample in enumerate(samples):
+        if index < n_val:
+            rows.append(("val", sample))
+            continue
+        repeats = cctv_repeat if _is_human_cctv(sample) else 1
+        if _is_human_cctv(sample):
+            cctv_train += 1
+        rows.extend(("train", sample) for _ in range(repeats))
+    return rows, cctv_train, n_val
 
 
 def _norm_points(points) -> list[list[float]]:
@@ -142,9 +168,12 @@ def collect_samples(log) -> list[dict]:
     return local + huggingface
 
 
-def build_yolo_dataset(log, *, samples=None, output_dir=None) -> Path:
+def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT) -> Path:
     samples = list(collect_samples(log) if samples is None else samples)
-    data_dir = Path(output_dir) if output_dir is not None else YOLO_DATA
+    data_dir = (Path(output_dir) if output_dir is not None else YOLO_DATA).resolve()
+    run_root = RUNS_DIR.resolve()
+    if data_dir == run_root or not data_dir.is_relative_to(run_root):
+        raise ValueError("Dataset output must be a subdirectory of outputs/train")
     if not samples:
         raise RuntimeError("학습용 이미지가 없습니다. 색인 또는 허깅페이스 PKLot를 확인하세요.")
 
@@ -154,15 +183,11 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None) -> Path:
         (data_dir / "images" / split).mkdir(parents=True, exist_ok=True)
         (data_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    random.seed(42)
-    random.shuffle(samples)
-    n_val = max(1, int(len(samples) * 0.2))
-    val_set = set(id(s) for s in samples[:n_val])
+    rows, cctv_train, n_val = _split_rows(samples, cctv_repeat=cctv_repeat)
 
     n_img = 0
     n_occluded = 0
-    for s in samples:
-        split = "val" if id(s) in val_set else "train"
+    for split, s in rows:
         src = Path(s["path"])
         stem = f"{src.stem}_{n_img}"
         dst_img = data_dir / "images" / split / f"{stem}{src.suffix.lower()}"
@@ -222,5 +247,9 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None) -> Path:
         ),
         encoding="utf-8",
     )
-    log(f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장 → {data_dir}")
+    log(
+        f"[YOLO 데이터] 주차칸 좌표 · 이미지 {n_img}장"
+        f" · CCTV 학습 원본 {cctv_train}장 × {cctv_repeat}"
+        f" · 검증 원본 {n_val}장 → {data_dir}"
+    )
     return yaml_path

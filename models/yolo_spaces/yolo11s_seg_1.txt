@@ -1,7 +1,7 @@
 {
   "task": "segment",
-  "source_run": "C:\\Users\\user1\\Desktop\\parking\\models\\_runs\\roi_yolo11s_seg_1",
-  "dataset": "C:\\Users\\user1\\Desktop\\parking\\outputs\\train\\line_improvement\\dataset_v3\\segment\\data.yaml",
+  "source_run": "models/_runs/roi_yolo11s_seg_1",
+  "dataset": "outputs/train/line_improvement/dataset_v3/segment/data.yaml",
   "inference_imgsz": 640,
   "tiled": false,
   "epochs": 25,

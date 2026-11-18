@@ -21,12 +21,12 @@ def main():
     from parking.training.prepare import _load_local_annotations, build_yolo_dataset
     from parking.training.yolo_ft import train_yolo
     torch.set_num_threads(4)
-    samples = sorted((s for s in _load_local_annotations() if s["rel"].startswith("cctv/")), key=lambda s: s["rel"])
+    samples = sorted((s for s in _load_local_annotations() if s["rel"].startswith("cctv/jongsu/")), key=lambda s: s["rel"])
     if len(samples) < 5:
         raise RuntimeError("At least five annotated CCTV images are required")
     run_dir = ROOT / "outputs" / "train" / ("line_occlusion_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     run_dir.mkdir(parents=True, exist_ok=False)
-    data = build_yolo_dataset(print, samples=samples, output_dir=run_dir / "dataset")
+    data = build_yolo_dataset(print, samples=samples, output_dir=run_dir / "dataset", cctv_repeat=1)
     manifest = {
         "task": "parking slot segmentation with partial occlusion",
         "source_images": len(samples),

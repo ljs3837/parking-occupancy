@@ -63,11 +63,11 @@ def main():
 def add_reviewed_negatives(dataset,task="pose"):
     import cv2,numpy as np
     from parking.training.prepare import _load_local_annotations
-    samples=[s for s in _load_local_annotations() if s["rel"].startswith("cctv/")]
+    samples=[s for s in _load_local_annotations() if s["rel"].startswith("cctv/jongsu/")]
     # These exact crop previews were visually reviewed; do not infer background
     # merely because an arbitrary area lacks annotations.
     manifest=json.loads((dataset/"manifest.json").read_text(encoding="utf-8"))
-    train_sources={r["source"] for r in manifest["records"] if r["split"]=="train" and not r.get("excluded")}
+    train_sources={r["source"].replace("cctv/", "cctv/jongsu/", 1) if r["source"].startswith("cctv/") and not r["source"].startswith("cctv/jongsu/") else r["source"] for r in manifest["records"] if r["split"]=="train" and not r.get("excluded")}
     negatives=[]
     for suffix,region in [("17",(0.,0.,1.,.38)),("11",(0.,.86,1.,1.))]:
         source=next(s for s in samples if Path(s["rel"]).stem==chr(0x3163)+suffix)

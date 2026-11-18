@@ -59,7 +59,7 @@ def select_sources(baseline=None):
     if baseline is not None and (Path(baseline)/"images/val").is_dir():
         previous={p.stem.rsplit("_",1)[0] for p in (Path(baseline)/"images/val").glob("*")}
         if val_stems != previous:raise RuntimeError("Validation split differs from the baseline")
-    local=sorted((s for s in sources if s["rel"].startswith("cctv/")),key=lambda s:s["rel"])
+    local=sorted((s for s in sources if s["rel"].startswith(config["source_prefix"])),key=lambda s:s["rel"])
     grouped=defaultdict(list)
     for s in sources:
         if s["rel"].startswith("cctv_image/"):

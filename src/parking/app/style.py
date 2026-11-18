@@ -38,6 +38,13 @@ QPushButton#navBtn[active="true"] {
   border-color: rgba(46, 196, 182, 0.35);
   color: #b8fff7;
 }
+QComboBox QAbstractItemView {
+  background: #141a22;
+  color: #e7eef7;
+  selection-background-color: rgba(46, 196, 182, 0.22);
+  selection-color: #e7eef7;
+  border: 1px solid #2a3545;
+}
 QLineEdit, QComboBox, QListWidget, QTreeView, QSpinBox, QTextEdit {
   background: #141a22;
   border: 1px solid #2a3545;

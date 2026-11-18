@@ -1,4 +1,4 @@
-YOLO segmentation (C:\Users\user1\Desktop\parking\yolov8n-seg.pt)
+YOLO segmentation (yolov8n-seg.pt)
 labels: polygon parking_space (occupancy ignored)
 file: yolo_4.pt
-source_run: C:\Users\user1\Desktop\parking\models\_runs\yolo_4\weights\best.pt
+source_run: models/_runs/yolo_4/weights/best.pt
