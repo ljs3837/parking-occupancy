@@ -708,6 +708,38 @@
         "filled": true,
         "occupancy_status": "not occupied",
         "space_id": 22
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_678a68ff",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.758550835892187,
+              0.615622275294742
+            ],
+            [
+              0.9963109860116001,
+              0.7369308919974222
+            ],
+            [
+              0.9293094238554137,
+              0.7829224833003289
+            ],
+            [
+              0.6636600136472193,
+              0.630785852382577
+            ]
+          ]
+        ],
+        "index": 23,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 23
       }
     ]
   }
