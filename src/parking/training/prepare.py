@@ -219,22 +219,57 @@ def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
     return items
 
 
-def collect_samples(log) -> list[dict]:
-    local = _load_local_annotations()
+def list_data_folders() -> list[str]:
+    """data 바로 아래 폴더 이름. 학습 탭의 기본 선택은 이 전체다."""
+    if not DATA_DIR.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in DATA_DIR.iterdir()
+        if path.is_dir() and not path.name.startswith(".")
+    )
+
+
+def _in_selected_folder(rel: str, folders: set[str] | None) -> bool:
+    if folders is None:
+        return True
+    top = rel.split("/", 1)[0] if rel else ""
+    return top in folders
+
+
+def collect_samples(log, folders: set[str] | None = None) -> list[dict]:
+    """folders가 None이면 data 아래 폴더를 전부 쓴다."""
+    allowed = None if folders is None else set(folders)
+    local = [
+        item
+        for item in _load_local_annotations()
+        if _in_selected_folder(str(item.get("rel") or ""), allowed)
+    ]
     log(f"[데이터] 로컬 색인 {len(local)}장")
     skip = {str(item["path"]) for item in local}
-    huggingface = _load_huggingface(skip, log)
-    kaggle = _load_kaggle_parking(skip | {str(item["path"]) for item in huggingface}, log)
+    use_huggingface = allowed is None or "huggingface" in allowed
+    use_kaggle = allowed is None or "kaggle" in allowed
+    huggingface = _load_huggingface(skip, log) if use_huggingface else []
+    if not use_huggingface:
+        log("[데이터] 허깅페이스 폴더 제외")
+    kaggle = _load_kaggle_parking(skip | {str(item["path"]) for item in huggingface}, log) if use_kaggle else []
+    if not use_kaggle:
+        log("[데이터] Kaggle 폴더 제외")
+    if allowed is not None:
+        huggingface = [item for item in huggingface if _in_selected_folder(str(item.get("rel") or ""), allowed)]
+        kaggle = [item for item in kaggle if _in_selected_folder(str(item.get("rel") or ""), allowed)]
     total = len(local) + len(huggingface) + len(kaggle)
+    chosen = "전체" if allowed is None else ", ".join(sorted(allowed))
     log(
         f"[데이터] 합계 {total}장 "
-        f"(로컬 {len(local)} + 허깅페이스 {len(huggingface)} + Kaggle {len(kaggle)})"
+        f"(로컬 {len(local)} + 허깅페이스 {len(huggingface)} + Kaggle {len(kaggle)}) "
+        f"· 폴더 {chosen}"
     )
     return local + huggingface + kaggle
 
 
-def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT) -> Path:
-    samples = list(collect_samples(log) if samples is None else samples)
+def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT, folders=None) -> Path:
+    samples = list(collect_samples(log, folders) if samples is None else samples)
     data_dir = (Path(output_dir) if output_dir is not None else YOLO_DATA).resolve()
     run_root = RUNS_DIR.resolve()
     if data_dir == run_root or not data_dir.is_relative_to(run_root):

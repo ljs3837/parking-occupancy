@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from parking.common.device import device_label, use_amp, yolo_device
+from parking.common.device import device_label, gpu_file_slug, use_amp, yolo_device
 from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
@@ -20,13 +20,14 @@ def train_yolo(
     imgsz: int = 640,
     model_name: str = "yolo11s-seg.pt",
     data_yaml: Path | None = None,
+    folders: set[str] | None = None,
     log=print,
     should_stop=None,
 ) -> Path:
     device = yolo_device()
     amp = use_amp(device)
     log(f"[YOLO] device={device_label()}  amp={amp}")
-    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log)
+    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders)
     log(f"[YOLO] data={yaml_path}")
     log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
 
@@ -35,7 +36,7 @@ def train_yolo(
 
     from ultralytics import YOLO
 
-    dest = next_model_path(OUT_DIR, "yolo")
+    dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
     run_name = dest.stem
     log(f"[YOLO] 저장 파일: {dest.name}")
     model = YOLO(model_name)
@@ -68,6 +69,7 @@ def train_yolo(
     dest.with_suffix(".txt").write_text(
         f"YOLO segmentation ({model_name})\n"
         "labels: polygon parking_space (occupancy ignored)\n"
+        f"device: {device_label()}\n"
         f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )
