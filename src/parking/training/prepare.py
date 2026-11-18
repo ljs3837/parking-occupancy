@@ -219,14 +219,18 @@ def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
     return items
 
 
+# annotations는 칸 좌표 파일이고, observe는 관제 영상이다. 학습 사진 폴더가 아니다.
+SKIP_DATA_FOLDERS = {"annotations", "observe"}
+
+
 def list_data_folders() -> list[str]:
-    """data 바로 아래 폴더 이름. 학습 탭의 기본 선택은 이 전체다."""
+    """학습에 넣을 수 있는 data 바로 아래 폴더. 기본 선택은 이 전체다."""
     if not DATA_DIR.is_dir():
         return []
     return sorted(
         path.name
         for path in DATA_DIR.iterdir()
-        if path.is_dir() and not path.name.startswith(".")
+        if path.is_dir() and not path.name.startswith(".") and path.name not in SKIP_DATA_FOLDERS
     )
 
 
