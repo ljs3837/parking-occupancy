@@ -1,0 +1,29 @@
+{
+  "task": "segment",
+  "source_run": "models/_runs/roi_yolo11s_seg_2",
+  "dataset": "outputs/train/line_improvement/dataset_v3/segment/data.yaml",
+  "inference_imgsz": 640,
+  "tiled": false,
+  "epochs": 10,
+  "base_model": "models/yolo_spaces/yolo11s_seg_1.pt",
+  "freeze": 0,
+  "batch": 4,
+  "learning_rate": 0.0001,
+  "warmup_bias_lr": 0.001,
+  "train_images": 60,
+  "notes": "Experimental ROI/extra-camera model; selection pending identical validation comparison",
+  "training_imgsz": 640,
+  "snap_lines": false,
+  "selected_stage": "quad_only",
+  "quad_fit": "enclosing",
+  "validation_polygon_metrics": {
+    "tp": 26,
+    "fp": 21,
+    "fn": 50,
+    "precision": 0.5531914893617021,
+    "recall": 0.34210526315789475,
+    "f1": 0.4227642276422764
+  },
+  "selection_min_precision": 0.5,
+  "selection_scope": "validation settings selection, not an independent test"
+}

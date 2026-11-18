@@ -1,0 +1,28 @@
+{
+  "task": "segment",
+  "source_run": "models/_runs/roi_yolo11s_seg_1",
+  "dataset": "outputs/train/line_improvement/dataset_v3/segment/data.yaml",
+  "inference_imgsz": 640,
+  "tiled": true,
+  "epochs": 25,
+  "base_model": "yolo11s-seg.pt",
+  "freeze": 10,
+  "batch": 4,
+  "train_images": 60,
+  "notes": "Experimental ROI/extra-camera model; selection pending identical validation comparison",
+  "snap_lines": false,
+  "selected_stage": "quad_only",
+  "quad_fit": "enclosing",
+  "validation_polygon_metrics": {
+    "tp": 27,
+    "fp": 28,
+    "fn": 49,
+    "precision": 0.4909090909090909,
+    "recall": 0.35526315789473684,
+    "f1": 0.4122137404580153
+  },
+  "selection_scope": "4 validation images plus 3-camera diagnostic comparison and qualitative video review; not an independent final test",
+  "training_imgsz": 640,
+  "selection_min_precision": 0.0,
+  "model_selection_reason": "Additional model reduced correct detections and increased false positives on separate-camera diagnostics; retain stage 1"
+}

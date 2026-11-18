@@ -16,16 +16,17 @@ ROTATION_DEGREES = 15.0
 def train_yolo(
     *,
     epochs: int = 5,
-    batch: int = 16,
+    batch: int = 4,
     imgsz: int = 640,
-    model_name: str = "yolov8n-seg.pt",
+    model_name: str = "yolo11s-seg.pt",
+    data_yaml: Path | None = None,
     log=print,
     should_stop=None,
 ) -> Path:
     device = yolo_device()
     amp = use_amp(device)
     log(f"[YOLO] device={device_label()}  amp={amp}")
-    yaml_path = build_yolo_dataset(log)
+    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log)
     log(f"[YOLO] data={yaml_path}")
     log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
 

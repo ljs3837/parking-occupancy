@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import threading
+import json
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 from parking.app.paths import ROOT
 from parking.common.device import yolo_device
+from parking.perception.lines import refine_spaces
+from parking.perception.tiling import tiled_candidates
 
 MODELS_DIR = ROOT / "models"
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -31,6 +35,13 @@ VEHICLE_WEIGHTS = "yolov8n.pt"
 
 def list_models() -> list[dict]:
     """관제에서 고를 수 있는 모델 목록."""
+    preferred_path = None
+    preference = MODELS_DIR / "preferred_parking_model.json"
+    if preference.is_file():
+        try:
+            preferred_path = (ROOT / json.loads(preference.read_text(encoding="utf-8"))["model"]).resolve()
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     items = [
         {
             "label": "YOLOv8n 차량만",
@@ -44,7 +55,8 @@ def list_models() -> list[dict]:
                 continue
             rel = path.relative_to(MODELS_DIR).as_posix()
             kind = "cnn" if "cnn" in rel.lower() else "occupancy"
-            items.append({"label": rel, "kind": kind, "path": str(path)})
+            items.append({"label": rel, "kind": kind, "path": str(path),
+                          "preferred": path.resolve() == preferred_path})
     return items
 
 
@@ -73,6 +85,7 @@ class LiveDetector:
         self.path = VEHICLE_WEIGHTS
         self.label = "YOLOv8n 차량만"
         self._lock = threading.Lock()
+        self._space_options = {}
 
     def use(self, kind: str, path: str, label: str):
         with self._lock:
@@ -89,8 +102,17 @@ class LiveDetector:
         from ultralytics import YOLO
 
         self._vehicle_model = YOLO(VEHICLE_WEIGHTS)
+        self._space_options = {}
         if self.kind == "occupancy":
             self._space_model = YOLO(self.path)
+            metadata = Path(self.path).with_suffix(".json")
+            if metadata.is_file():
+                try:
+                    options = json.loads(metadata.read_text(encoding="utf-8"))
+                    if isinstance(options, dict):
+                        self._space_options = options
+                except (OSError, ValueError):
+                    pass
         else:
             self._space_model = None
         self._ready = True
@@ -103,14 +125,24 @@ class LiveDetector:
             if self._vehicle_model is not None:
                 boxes.extend(self._yolo_boxes(frame_bgr, self._vehicle_model, "coco"))
             if self.kind == "occupancy" and self._space_model is not None:
-                boxes.extend(self._yolo_boxes(frame_bgr, self._space_model, "occupancy"))
-            return boxes
+                size = int(self._space_options.get("inference_imgsz", 640))
+                if size not in (640, 960, 1280):
+                    size = 640
+                boxes.extend(self.predict_space_candidates(
+                    frame_bgr, self._space_model, imgsz=size,
+                    tiled=bool(self._space_options.get("tiled", False))))
+            return refine_spaces(frame_bgr, boxes, snap_lines=bool(self._space_options.get("snap_lines", True)),
+                                 quad_fit=self._space_options.get("quad_fit", "conservative"))
 
-    def _yolo_boxes(self, frame_bgr: np.ndarray, model, kind: str) -> list[dict]:
+    def predict_space_candidates(self, frame_bgr, model, *, imgsz=640, tiled=False):
+        predict = lambda image: self._yolo_boxes(image, model, "occupancy", imgsz=imgsz)
+        return tiled_candidates(frame_bgr, predict) if tiled else predict(frame_bgr)
+
+    def _yolo_boxes(self, frame_bgr: np.ndarray, model, kind: str, *, imgsz=640) -> list[dict]:
         result = model.predict(
             frame_bgr,
             verbose=False,
-            imgsz=640,
+            imgsz=imgsz,
             conf=0.35,
             device=yolo_device(),
         )[0]
@@ -119,6 +151,7 @@ class LiveDetector:
             return boxes
         names = result.names or {}
         mask_points = result.masks.xy if result.masks is not None else None
+        corner_points = result.keypoints.xy if result.keypoints is not None else None
         for index, box in enumerate(result.boxes):
             cls_id = int(box.cls[0])
             x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
@@ -137,6 +170,10 @@ class LiveDetector:
             points = None
             if mask_points is not None and index < len(mask_points):
                 points = mask_points[index].tolist()
+            elif kind == "occupancy" and corner_points is not None and index < len(corner_points):
+                candidate = corner_points[index].cpu().numpy()
+                if candidate.shape == (4, 2) and np.isfinite(candidate).all():
+                    points = candidate.tolist()
             boxes.append(
                 {
                     "xyxy": (x1, y1, x2, y2),

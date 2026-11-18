@@ -1,0 +1,22 @@
+{
+  "default_model": "models/yolo_spaces/yolo11s_seg_1.pt",
+  "additional_model": "models/yolo_spaces/yolo11s_seg_2.pt",
+  "reason": "Additional model reduced correct detections and increased false positives on separate-camera diagnostics; retain stage 1",
+  "scope": "4 validation images plus 3-camera diagnostic comparison and qualitative video review; not an independent final test",
+  "stage1_camera_metrics": {
+    "tp": 19,
+    "fp": 3,
+    "fn": 117,
+    "precision": 0.8636363636363636,
+    "recall": 0.13970588235294118,
+    "f1": 0.24050632911392406
+  },
+  "stage2_camera_metrics": {
+    "tp": 16,
+    "fp": 9,
+    "fn": 120,
+    "precision": 0.64,
+    "recall": 0.11764705882352941,
+    "f1": 0.1987577639751553
+  }
+}
