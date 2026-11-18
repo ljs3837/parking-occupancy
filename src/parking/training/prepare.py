@@ -36,8 +36,8 @@ YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
 OCC_NEG = {"empty", "not occupied"}
-# data/cctv 인간 색인은 주차장이 제각각이라, 학습 세트에서만 이 횟수만큼 반복한다.
-CCTV_TRAIN_REPEAT = 10
+# data/cctv 인간 색인은 학습에만 넣고 이 횟수만큼 반복한다. 검증에는 넣지 않는다.
+CCTV_TRAIN_REPEAT = 5
 
 
 def _is_human_cctv(sample: dict) -> bool:
@@ -45,23 +45,20 @@ def _is_human_cctv(sample: dict) -> bool:
 
 
 def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
-    """검증은 원본 1장. cctv 인간 색인만 학습 쪽에서 반복한다."""
+    """cctv는 전부 학습. 그 외 폴더는 20%를 검증으로 나눈다."""
     if cctv_repeat < 1:
         raise ValueError("cctv_repeat must be at least one")
+    cctv = [sample for sample in samples if _is_human_cctv(sample)]
+    others = [sample for sample in samples if not _is_human_cctv(sample)]
     random.seed(42)
-    random.shuffle(samples)
-    n_val = max(1, int(len(samples) * 0.2))
+    random.shuffle(others)
+    n_val = max(1, int(len(others) * 0.2)) if others else 0
     rows: list[tuple[str, dict]] = []
-    cctv_train = 0
-    for index, sample in enumerate(samples):
-        if index < n_val:
-            rows.append(("val", sample))
-            continue
-        repeats = cctv_repeat if _is_human_cctv(sample) else 1
-        if _is_human_cctv(sample):
-            cctv_train += 1
-        rows.extend(("train", sample) for _ in range(repeats))
-    return rows, cctv_train, n_val
+    for sample in cctv:
+        rows.extend(("train", sample) for _ in range(cctv_repeat))
+    for index, sample in enumerate(others):
+        rows.append(("val" if index < n_val else "train", sample))
+    return rows, len(cctv), n_val
 
 
 def _norm_points(points) -> list[list[float]]:

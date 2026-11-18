@@ -10,9 +10,11 @@ class MergeDataTests(unittest.TestCase):
         rows,_,n_val=prepare._split_rows(samples,cctv_repeat=3)
         validation=[s['rel'] for split,s in rows if split=='val']
         train=[s['rel'] for split,s in rows if split=='train']
-        self.assertEqual(n_val,4)
+        self.assertEqual(n_val,2)
+        self.assertTrue(all(not name.startswith('cctv/') for name in validation))
         self.assertEqual(len(validation),len(set(validation)))
         self.assertFalse(set(validation)&set(train))
+        self.assertEqual(sum(name.startswith('cctv/') for name in set(train)),10)
         for name in set(train):self.assertEqual(train.count(name),3 if name.startswith('cctv/') else 1)
 
     def test_augmentation_preserves_validation_and_output_guard(self):
@@ -25,7 +27,7 @@ class MergeDataTests(unittest.TestCase):
             with patch.object(prepare,'RUNS_DIR',run_root):
                 output=run_root/'dataset'
                 prepare.build_yolo_dataset(lambda _:None,samples=samples,output_dir=output,cctv_repeat=2)
-                self.assertEqual(len(list((output/'images/val').glob('*'))),1)
+                self.assertEqual(len(list((output/'images/val').glob('*'))),0)
                 train_sources={p.stem.split('_')[0] for p in (output/'images/train').glob('*')}
                 val_sources={p.stem.split('_')[0] for p in (output/'images/val').glob('*')}
                 self.assertFalse(train_sources&val_sources)
