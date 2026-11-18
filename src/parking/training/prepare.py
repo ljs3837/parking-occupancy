@@ -9,6 +9,7 @@ from pathlib import Path
 
 from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
 from parking.app.paths import DATA_DIR, ROOT
+from parking.training.occlusion import occlude_slots
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
@@ -39,8 +40,10 @@ def _is_human_cctv(sample: dict) -> bool:
     return str(sample.get("rel") or "").startswith("cctv/")
 
 
-def _split_rows(samples: list[dict]) -> tuple[list[tuple[str, dict]], int, int]:
+def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
     """검증은 원본 1장. cctv 인간 색인만 학습 쪽에서 반복한다."""
+    if cctv_repeat < 1:
+        raise ValueError("cctv_repeat must be at least one")
     random.seed(42)
     random.shuffle(samples)
     n_val = max(1, int(len(samples) * 0.2))
@@ -50,8 +53,8 @@ def _split_rows(samples: list[dict]) -> tuple[list[tuple[str, dict]], int, int]:
         if index < n_val:
             rows.append(("val", sample))
             continue
-        repeats = CCTV_TRAIN_REPEAT if _is_human_cctv(sample) else 1
-        if repeats > 1:
+        repeats = cctv_repeat if _is_human_cctv(sample) else 1
+        if _is_human_cctv(sample):
             cctv_train += 1
         rows.extend(("train", sample) for _ in range(repeats))
     return rows, cctv_train, n_val
@@ -165,24 +168,29 @@ def collect_samples(log) -> list[dict]:
     return local + huggingface
 
 
-def build_yolo_dataset(log) -> Path:
-    samples = collect_samples(log)
+def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT) -> Path:
+    samples = list(collect_samples(log) if samples is None else samples)
+    data_dir = (Path(output_dir) if output_dir is not None else YOLO_DATA).resolve()
+    run_root = RUNS_DIR.resolve()
+    if data_dir == run_root or not data_dir.is_relative_to(run_root):
+        raise ValueError("Dataset output must be a subdirectory of outputs/train")
     if not samples:
         raise RuntimeError("학습용 이미지가 없습니다. 색인 또는 허깅페이스 PKLot를 확인하세요.")
 
-    if YOLO_DATA.exists():
-        shutil.rmtree(YOLO_DATA)
+    if data_dir.exists():
+        shutil.rmtree(data_dir)
     for split in ("train", "val"):
-        (YOLO_DATA / "images" / split).mkdir(parents=True, exist_ok=True)
-        (YOLO_DATA / "labels" / split).mkdir(parents=True, exist_ok=True)
+        (data_dir / "images" / split).mkdir(parents=True, exist_ok=True)
+        (data_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    rows, cctv_train, n_val = _split_rows(samples)
+    rows, cctv_train, n_val = _split_rows(samples, cctv_repeat=cctv_repeat)
 
     n_img = 0
+    n_occluded = 0
     for split, s in rows:
         src = Path(s["path"])
         stem = f"{src.stem}_{n_img}"
-        dst_img = YOLO_DATA / "images" / split / f"{stem}{src.suffix.lower()}"
+        dst_img = data_dir / "images" / split / f"{stem}{src.suffix.lower()}"
         shutil.copy2(src, dst_img)
 
         lines = []
@@ -200,17 +208,36 @@ def build_yolo_dataset(log) -> Path:
         if not lines:
             dst_img.unlink(missing_ok=True)
             continue
-        (YOLO_DATA / "labels" / split / f"{stem}.txt").write_text(
+        (data_dir / "labels" / split / f"{stem}.txt").write_text(
             "\n".join(lines) + "\n",
             encoding="utf-8",
         )
+        # Augment train only, after splitting: no augmented validation leakage.
+        if split == "train":
+            import cv2
+            import numpy as np
+
+            image = cv2.imdecode(np.fromfile(str(src), dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is not None:
+                augmented, changed = occlude_slots(image, s["polygons"], seed=42 + n_img)
+                if changed:
+                    augmented_path = dst_img.with_name(f"{stem}_occluded.jpg")
+                    ok, encoded = cv2.imencode(".jpg", augmented)
+                    if not ok:
+                        raise RuntimeError(f"Could not encode {augmented_path}")
+                    encoded.tofile(str(augmented_path))
+                    (data_dir / "labels" / split / f"{stem}_occluded.txt").write_text(
+                        "\n".join(lines) + "\n", encoding="utf-8"
+                    )
+                    n_occluded += 1
         n_img += 1
 
-    yaml_path = YOLO_DATA / "data.yaml"
+    log(f"[YOLO] synthetic partial occlusion: {n_occluded} train images; full labels retained")
+    yaml_path = data_dir / "data.yaml"
     yaml_path.write_text(
         "\n".join(
             [
-                f"path: {YOLO_DATA.as_posix()}",
+                f"path: {data_dir.as_posix()}",
                 "train: images/train",
                 "val: images/val",
                 "names:",
@@ -221,8 +248,8 @@ def build_yolo_dataset(log) -> Path:
         encoding="utf-8",
     )
     log(
-        f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장"
-        f" · cctv 인간 색인 학습 {cctv_train}장 × {CCTV_TRAIN_REPEAT}"
-        f" · 검증 원본 {n_val}장 → {YOLO_DATA}"
+        f"[YOLO 데이터] 주차칸 좌표 · 이미지 {n_img}장"
+        f" · CCTV 학습 원본 {cctv_train}장 × {cctv_repeat}"
+        f" · 검증 원본 {n_val}장 → {data_dir}"
     )
     return yaml_path

@@ -1,0 +1,4 @@
+{
+  "model": "models/yolo_spaces/yolo11s_seg_1.pt",
+  "reason": "User requested YOLO11s; experimental validation settings"
+}
