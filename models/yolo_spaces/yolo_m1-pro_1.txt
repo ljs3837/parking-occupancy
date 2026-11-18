@@ -1,0 +1,6 @@
+YOLO segmentation (yolo11n-seg.pt)
+labels: polygon parking_space (occupancy ignored)
+device: Apple GPU (MPS)
+data: cctv, cctv_image, huggingface
+file: yolo_m1-pro_1.pt
+source_run: /Users/taesoo/Projects/teamProject/parking-occupancy/models/_runs/yolo_5/weights/best.pt

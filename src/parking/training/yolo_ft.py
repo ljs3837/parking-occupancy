@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from parking.common.device import device_label, gpu_file_slug, use_amp, yolo_device
-from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
+from parking.training.prepare import MODELS_DIR, build_yolo_dataset, list_data_folders, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
 # 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
@@ -66,10 +66,12 @@ def train_yolo(
     else:
         raise RuntimeError(f"YOLO best.pt를 찾지 못했습니다: {best}")
 
+    used_folders = sorted(folders) if folders is not None else list_data_folders()
     dest.with_suffix(".txt").write_text(
         f"YOLO segmentation ({model_name})\n"
         "labels: polygon parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
+        f"data: {', '.join(used_folders)}\n"
         f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )
