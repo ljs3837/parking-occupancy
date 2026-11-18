@@ -6,12 +6,13 @@ from parking.training import prepare
 
 class MergeDataTests(unittest.TestCase):
     def test_repetition_happens_after_split(self):
-        samples=[{'rel':f'cctv/jongsu/image{i}.jpg'} for i in range(10)]+[{'rel':f'pklot/image{i}.jpg'} for i in range(10)]
+        samples=[{'rel':f'cctv/jongsu/image{i}.jpg'} for i in range(10)]+[{'rel':f'huggingface/image{i}.jpg'} for i in range(5)]+[{'rel':f'pklot/image{i}.jpg'} for i in range(10)]
         rows,_,n_val=prepare._split_rows(samples,cctv_repeat=3)
         validation=[s['rel'] for split,s in rows if split=='val']
         train=[s['rel'] for split,s in rows if split=='train']
         self.assertEqual(n_val,2)
-        self.assertTrue(all(not name.startswith('cctv/') for name in validation))
+        self.assertTrue(all(not name.startswith(('cctv/','huggingface/')) for name in validation))
+        self.assertEqual(sum(name.startswith('huggingface/') for name in train),5)
         self.assertEqual(len(validation),len(set(validation)))
         self.assertFalse(set(validation)&set(train))
         self.assertEqual(sum(name.startswith('cctv/') for name in set(train)),10)

@@ -29,7 +29,8 @@ def next_model_path(directory: Path, stem: str) -> Path:
 
 
 SAMPLES_JSON = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
-KAGGLE_DIR = DATA_DIR / "kaggle" / "parking-space-detection"
+KAGGLE_ROOT = DATA_DIR / "kaggle"
+KAGGLE_DIR = KAGGLE_ROOT / "parking-space-detection"
 KAGGLE_XML = KAGGLE_DIR / "annotations.xml"
 KAGGLE_IMAGES = KAGGLE_DIR / "images"
 YOLO_DATA = RUNS_DIR / "yolo_parking"
@@ -44,18 +45,28 @@ def _is_human_cctv(sample: dict) -> bool:
     return str(sample.get("rel") or "").startswith("cctv/")
 
 
+def _is_huggingface(sample: dict) -> bool:
+    return str(sample.get("rel") or "").startswith("huggingface/")
+
+
 def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
-    """cctv는 전부 학습. 그 외 폴더는 20%를 검증으로 나눈다."""
+    """cctv와 허깅페이스는 전부 학습. 그 외 폴더는 20%를 검증으로 나눈다."""
     if cctv_repeat < 1:
         raise ValueError("cctv_repeat must be at least one")
     cctv = [sample for sample in samples if _is_human_cctv(sample)]
-    others = [sample for sample in samples if not _is_human_cctv(sample)]
+    huggingface = [sample for sample in samples if _is_huggingface(sample)]
+    others = [
+        sample
+        for sample in samples
+        if not _is_human_cctv(sample) and not _is_huggingface(sample)
+    ]
     random.seed(42)
     random.shuffle(others)
     n_val = max(1, int(len(others) * 0.2)) if others else 0
     rows: list[tuple[str, dict]] = []
     for sample in cctv:
         rows.extend(("train", sample) for _ in range(cctv_repeat))
+    rows.extend(("train", sample) for sample in huggingface)
     for index, sample in enumerate(others):
         rows.append(("val" if index < n_val else "train", sample))
     return rows, len(cctv), n_val
@@ -176,44 +187,136 @@ def _polygon_points(raw: str, width: float, height: float) -> list[list[float]]:
     return points
 
 
-def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
-    """원본 사진과 XML 칸 좌표만 읽는다. 선이 그려진 boxes 이미지는 쓰지 않는다."""
-    if not KAGGLE_XML.is_file() or not KAGGLE_IMAGES.is_dir():
-        log(f"[데이터] Kaggle 주차 데이터 없음: {KAGGLE_DIR}")
-        return []
+def _parking_polygon(points: list[list[float]]) -> dict | None:
+    if len(points) < 3:
+        return None
+    return {"points": points, "status": "unknown", "label": "parking_space"}
 
+
+def _sample_item(path: Path, polygons: list[dict], skip_paths: set[str]) -> dict | None:
+    polygons = [polygon for polygon in polygons if polygon]
+    if not path.is_file() or str(path) in skip_paths or not polygons:
+        return None
+    try:
+        rel = path.relative_to(DATA_DIR).as_posix()
+    except ValueError:
+        rel = path.as_posix()
+    return {"rel": rel, "path": path, "polygons": polygons}
+
+
+def _load_kaggle_detection(skip_paths: set[str]) -> list[dict]:
+    """CVAT XML 폴리곤. 선이 그려진 boxes 이미지는 쓰지 않는다."""
+    if not KAGGLE_XML.is_file() or not KAGGLE_IMAGES.is_dir():
+        return []
     root = ET.parse(KAGGLE_XML).getroot()
     items = []
     for image in root.iter("image"):
         name = Path(image.get("name") or "").name
         path = KAGGLE_IMAGES / name
-        if not name or not path.is_file() or str(path) in skip_paths:
-            continue
         width = float(image.get("width") or 0)
         height = float(image.get("height") or 0)
-        if width <= 0 or height <= 0:
+        if not name or width <= 0 or height <= 0:
             continue
         polygons = []
         for polygon in image.findall("polygon"):
-            points = _polygon_points(polygon.get("points") or "", width, height)
-            if len(points) < 3:
+            polygons.append(_parking_polygon(_polygon_points(polygon.get("points") or "", width, height)))
+        item = _sample_item(path, polygons, skip_paths)
+        if item:
+            items.append(item)
+    return items
+
+
+def _load_kaggle_top_view(skip_paths: set[str]) -> list[dict]:
+    """탑뷰 JSON의 칸 상자를 네 꼭짓점 폴리곤으로 넣는다."""
+    root = KAGGLE_ROOT / "parking-space-top-view"
+    if not root.is_dir():
+        return []
+    from PIL import Image
+
+    items = []
+    for path in sorted(root.glob("*.jpg")):
+        label_path = path.with_suffix(".json")
+        if not label_path.is_file():
+            continue
+        raw = json.loads(label_path.read_text(encoding="utf-8"))
+        with Image.open(path) as image:
+            width, height = image.size
+        if width <= 0 or height <= 0:
+            continue
+        polygons = []
+        for label in raw.get("labels") or []:
+            try:
+                x1 = float(label["x1"]) / width
+                y1 = float(label["y1"]) / height
+                x2 = float(label["x2"]) / width
+                y2 = float(label["y2"]) / height
+            except (KeyError, TypeError, ValueError):
                 continue
             polygons.append(
-                {
-                    "points": points,
-                    "status": "unknown",
-                    "label": "parking_space",
-                }
+                _parking_polygon(
+                    [
+                        [min(1.0, max(0.0, x1)), min(1.0, max(0.0, y1))],
+                        [min(1.0, max(0.0, x2)), min(1.0, max(0.0, y1))],
+                        [min(1.0, max(0.0, x2)), min(1.0, max(0.0, y2))],
+                        [min(1.0, max(0.0, x1)), min(1.0, max(0.0, y2))],
+                    ]
+                )
             )
-        if not polygons:
+        item = _sample_item(path, polygons, skip_paths)
+        if item:
+            items.append(item)
+    return items
+
+
+def _yolo_seg_polygons(text: str) -> list[dict]:
+    polygons = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 7:
             continue
         try:
-            rel = path.relative_to(DATA_DIR).as_posix()
+            coords = [float(value) for value in parts[1:]]
         except ValueError:
-            rel = path.as_posix()
-        items.append({"rel": rel, "path": path, "polygons": polygons})
-    log(f"[데이터] Kaggle 주차 원본 {len(items)}장")
+            continue
+        if len(coords) % 2:
+            continue
+        points = [
+            [min(1.0, max(0.0, coords[index])), min(1.0, max(0.0, coords[index + 1]))]
+            for index in range(0, len(coords), 2)
+        ]
+        polygons.append(_parking_polygon(points))
+    return polygons
+
+
+def _load_kaggle_mmu(skip_paths: set[str]) -> list[dict]:
+    """MMU 전체 장면과 YOLO 분할 라벨. 칸만 잘라 둔 중복 사진은 넣지 않는다."""
+    base = KAGGLE_ROOT / "mmu-parking-slots" / "main_data"
+    items = []
+    for split in ("train", "test"):
+        images = base / split / "images"
+        labels = base / split / "yolo_seg_labels"
+        if not images.is_dir() or not labels.is_dir():
+            continue
+        for label_path in labels.glob("*.txt"):
+            path = images / f"{label_path.stem}.jpg"
+            polygons = _yolo_seg_polygons(label_path.read_text(encoding="utf-8"))
+            item = _sample_item(path, polygons, skip_paths)
+            if item:
+                items.append(item)
     return items
+
+
+def _load_kaggle_parking(skip_paths: set[str], log) -> list[dict]:
+    """data/kaggle 아래 칸 좌표가 있는 세트를 모두 읽는다."""
+    detection = _load_kaggle_detection(skip_paths)
+    top_view = _load_kaggle_top_view(skip_paths | {str(item["path"]) for item in detection})
+    mmu = _load_kaggle_mmu(skip_paths | {str(item["path"]) for item in detection + top_view})
+    log(
+        f"[데이터] Kaggle 원본 {len(detection)}장"
+        f" · 탑뷰 {len(top_view)}장"
+        f" · MMU {len(mmu)}장"
+    )
+    return detection + top_view + mmu
 
 
 # annotations는 칸 좌표 파일이고, observe는 관제 영상이다. 학습 사진 폴더가 아니다.
@@ -351,6 +454,7 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_T
     log(
         f"[YOLO 데이터] 주차칸 좌표 · 이미지 {n_img}장"
         f" · CCTV 학습 원본 {cctv_train}장 × {cctv_repeat}"
+        f" · 허깅페이스는 학습만"
         f" · 검증 원본 {n_val}장 → {data_dir}"
     )
     return yaml_path
