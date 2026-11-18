@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from parking.app.paths import ROOT
+from parking.common.device import yolo_device
 
 MODELS_DIR = ROOT / "models"
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -106,7 +107,13 @@ class LiveDetector:
             return boxes
 
     def _yolo_boxes(self, frame_bgr: np.ndarray, model, kind: str) -> list[dict]:
-        result = model.predict(frame_bgr, verbose=False, imgsz=640, conf=0.35)[0]
+        result = model.predict(
+            frame_bgr,
+            verbose=False,
+            imgsz=640,
+            conf=0.35,
+            device=yolo_device(),
+        )[0]
         boxes = []
         if result.boxes is None:
             return boxes

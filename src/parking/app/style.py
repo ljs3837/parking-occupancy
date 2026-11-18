@@ -2,7 +2,7 @@ APP_STYLE = """
 QMainWindow, QWidget {
   background: #0c1016;
   color: #e7eef7;
-  font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+  font-family: 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Helvetica Neue', sans-serif;
   font-size: 13px;
 }
 QToolBar {

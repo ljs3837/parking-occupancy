@@ -1,19 +1,34 @@
 """CHAD_Videos에서 앞번호 1~4 영상을 번호별·파일명순으로 하나씩 합친다.
 
-원본은 삭제하지 않는다. C 드라이브 용량이 부족하므로 결과 파일은 D:\\parking-cctv 에 쓰고,
-data/observe/1.mp4 같은 바로가기로 연결한다.
+원본은 삭제하지 않는다. Windows에서 D:가 있으면 결과는 D:\\parking-cctv 에 쓰고,
+Mac을 포함한 그 외에는 outputs/parking-cctv 에 쓴다. data/observe/merged 로 연결한다.
+PARKING_CCTV_OUT 이 있으면 그 경로를 쓴다.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import imageio_ffmpeg
 
-SRC = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\observe\CHAD_Videos")
-OUT_DIR = Path(r"D:\parking-cctv")
-LINK_DIR = Path(r"c:\Users\user1\soo\project\parking-occupancy\data\observe")
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "data" / "observe" / "CHAD_Videos"
+LINK_DIR = ROOT / "data" / "observe"
+
+
+def _output_dir() -> Path:
+    env = os.environ.get("PARKING_CCTV_OUT")
+    if env:
+        return Path(env)
+    if sys.platform == "win32" and Path("D:/").exists():
+        return Path(r"D:\parking-cctv")
+    return ROOT / "outputs" / "parking-cctv"
+
+
+OUT_DIR = _output_dir()
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 BATCH = 8
 
@@ -89,14 +104,18 @@ def concat_parts(parts: list[Path], dest: Path) -> None:
 
 
 def link_into_project(camera: str, target: Path) -> None:
-    """파일 심볼릭 링크는 권한이 필요해서, 폴더 연결(merged)만 사용한다."""
+    """폴더 연결(merged)만 사용한다. Windows는 정션, Mac/Linux는 심볼릭 링크."""
     link_dir = LINK_DIR / "merged"
-    if link_dir.exists():
+    if link_dir.exists() or link_dir.is_symlink():
         return
-    subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link_dir), str(target.parent)],
-        check=False,
-    )
+    link_dir.parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link_dir), str(target.parent)],
+            check=False,
+        )
+        return
+    link_dir.symlink_to(target.parent, target_is_directory=True)
 
 
 def merge_camera(camera: str) -> None:

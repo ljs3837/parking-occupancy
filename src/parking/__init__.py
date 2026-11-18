@@ -1,3 +1,7 @@
 """주차면 점유 관제 패키지. 실행 파일은 src/main.py."""
 
 __version__ = "0.1.0"
+
+from parking.common.device import configure_runtime
+
+configure_runtime()

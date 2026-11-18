@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from parking.common.device import device_label, use_amp, yolo_device
 from parking.training.prepare import MODELS_DIR, build_yolo_dataset, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
@@ -19,6 +20,9 @@ def train_yolo(
     log=print,
     should_stop=None,
 ) -> Path:
+    device = yolo_device()
+    amp = use_amp(device)
+    log(f"[YOLO] device={device_label()}  amp={amp}")
     yaml_path = build_yolo_dataset(log)
     log(f"[YOLO] data={yaml_path}")
     log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}")
@@ -42,6 +46,8 @@ def train_yolo(
         exist_ok=False,
         verbose=True,
         workers=0,
+        device=device,
+        amp=amp,
         patience=max(3, epochs),
     )
 

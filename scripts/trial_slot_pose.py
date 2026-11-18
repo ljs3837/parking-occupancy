@@ -1,14 +1,19 @@
 """Small, date-held-out parking-corner experiment; never edits UI annotations."""
 import json
 import shutil
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from parking.common.device import use_amp, yolo_device
 
 import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
 
-ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'outputs' / 'slot_pose_trial'
 DATA = ROOT / 'data/huggingface/hub/Voxel51/PKLot'
 
@@ -73,7 +78,7 @@ def evaluate(selected):
     for index, (path, sample) in enumerate(cases):
         im = cv2.imread(str(path))
         h, w = im.shape[:2]
-        result = model.predict(im, imgsz=512, conf=.15, iou=.5, max_det=300, device='cpu', verbose=False)[0]
+        result = model.predict(im, imgsz=512, conf=.15, iou=.5, max_det=300, device=yolo_device(), verbose=False)[0]
         pred = result.keypoints.xy.cpu().numpy() if result.keypoints is not None else np.empty((0, 4, 2))
         conf = result.boxes.conf.cpu().tolist()
         gt = [] if sample is None else [p for x in sample['parking_spaces']['polylines'] if (p := corners(x['points'][0])) is not None]
@@ -116,5 +121,6 @@ if __name__ == '__main__':
     selected = prepare()
     if not (OUT / 'training/weights/best.pt').exists():
         model = YOLO('yolo11n-pose.yaml').load(str(ROOT / 'yolo11n.pt'))
-        model.train(data=str(OUT / 'dataset.yaml'), epochs=20, imgsz=512, batch=4, workers=0, device='cpu', freeze=10, project=str(OUT), name='training', exist_ok=True, patience=0, plots=False, cache=False, amp=False, mosaic=0, fliplr=0, flipud=0, degrees=0, translate=.05, scale=.1, seed=42)
+        device = yolo_device()
+        model.train(data=str(OUT / 'dataset.yaml'), epochs=20, imgsz=512, batch=4, workers=0, device=device, freeze=10, project=str(OUT), name='training', exist_ok=True, patience=0, plots=False, cache=False, amp=use_amp(device), mosaic=0, fliplr=0, flipud=0, degrees=0, translate=.05, scale=.1, seed=42)
     evaluate(selected)
