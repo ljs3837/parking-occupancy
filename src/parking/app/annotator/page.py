@@ -156,6 +156,7 @@ class AnnotatorPage(QWidget):
         side_layout.addWidget(self.poly_list)
         hint = QLabel(
             "같은 폴더 사진은 색인 JSON 하나를 공유 · E 로 상태 전환 · "
+            "주차칸은 꼭짓점 4개 클릭 시 자동 확정 · "
             "그리기 중 Ctrl을 누르면 가까운 꼭짓점에 붙음 · "
             "Backspace: 마지막 점 취소 · Esc: 전체 취소"
         )
