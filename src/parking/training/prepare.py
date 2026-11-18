@@ -31,6 +31,30 @@ YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
 OCC_NEG = {"empty", "not occupied"}
+# data/cctv 인간 색인은 주차장이 제각각이라, 학습 세트에서만 이 횟수만큼 반복한다.
+CCTV_TRAIN_REPEAT = 10
+
+
+def _is_human_cctv(sample: dict) -> bool:
+    return str(sample.get("rel") or "").startswith("cctv/")
+
+
+def _split_rows(samples: list[dict]) -> tuple[list[tuple[str, dict]], int, int]:
+    """검증은 원본 1장. cctv 인간 색인만 학습 쪽에서 반복한다."""
+    random.seed(42)
+    random.shuffle(samples)
+    n_val = max(1, int(len(samples) * 0.2))
+    rows: list[tuple[str, dict]] = []
+    cctv_train = 0
+    for index, sample in enumerate(samples):
+        if index < n_val:
+            rows.append(("val", sample))
+            continue
+        repeats = CCTV_TRAIN_REPEAT if _is_human_cctv(sample) else 1
+        if repeats > 1:
+            cctv_train += 1
+        rows.extend(("train", sample) for _ in range(repeats))
+    return rows, cctv_train, n_val
 
 
 def _norm_points(points) -> list[list[float]]:
@@ -152,14 +176,10 @@ def build_yolo_dataset(log) -> Path:
         (YOLO_DATA / "images" / split).mkdir(parents=True, exist_ok=True)
         (YOLO_DATA / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    random.seed(42)
-    random.shuffle(samples)
-    n_val = max(1, int(len(samples) * 0.2))
-    val_set = set(id(s) for s in samples[:n_val])
+    rows, cctv_train, n_val = _split_rows(samples)
 
     n_img = 0
-    for s in samples:
-        split = "val" if id(s) in val_set else "train"
+    for split, s in rows:
         src = Path(s["path"])
         stem = f"{src.stem}_{n_img}"
         dst_img = YOLO_DATA / "images" / split / f"{stem}{src.suffix.lower()}"
@@ -200,5 +220,9 @@ def build_yolo_dataset(log) -> Path:
         ),
         encoding="utf-8",
     )
-    log(f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장 → {YOLO_DATA}")
+    log(
+        f"[YOLO 데이터] 주차칸 좌표만 사용 · 이미지 {n_img}장"
+        f" · cctv 인간 색인 학습 {cctv_train}장 × {CCTV_TRAIN_REPEAT}"
+        f" · 검증 원본 {n_val}장 → {YOLO_DATA}"
+    )
     return yaml_path

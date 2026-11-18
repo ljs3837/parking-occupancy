@@ -65,8 +65,13 @@ def flat_points(points) -> list[list[float]]:
         and points[0]
         and isinstance(points[0][0], (list, tuple))
     ):
-        return [[float(x), float(y)] for x, y in points[0]]
-    return [[float(x), float(y)] for x, y in points]
+        points = points[0]
+    flat = []
+    for point in points:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        flat.append([float(point[0]), float(point[1])])
+    return flat
 
 
 def _occupancy_status(polygon: dict) -> tuple[str, str]:
