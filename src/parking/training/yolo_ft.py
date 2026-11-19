@@ -12,6 +12,23 @@ from parking.training.prepare import MODELS_DIR, ROOT, build_yolo_dataset, list_
 OUT_DIR = MODELS_DIR / "yolo_spaces"
 # 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
 ROTATION_DEGREES = 15.0
+# Ultralytics는 MPS/CPU에서 workers를 0으로 강제한다. 아래에서 콜백으로 다시 올린다.
+DATALOADER_WORKERS = 4
+
+
+def _force_dataloader_workers(model, workers: int, log) -> None:
+    """MPS/CPU에서도 DataLoader 워커를 강제로 살린다. Mac+GUI에서는 불안정할 수 있다."""
+
+    def on_pretrain_routine_start(trainer):
+        if trainer.args.workers == workers:
+            return
+        log(
+            f"[YOLO] Ultralytics가 workers={trainer.args.workers}로 막아서 "
+            f"{workers}로 강제 복구 (불안정하면 0으로 되돌리세요)"
+        )
+        trainer.args.workers = workers
+
+    model.add_callback("on_pretrain_routine_start", on_pretrain_routine_start)
 
 
 def _format_duration(seconds: float) -> str:
@@ -142,6 +159,7 @@ def train_yolo(
     # Corner identities depend on image orientation.
     augmentation = {"fliplr": 0.0} if task == "pose" else {}
     _attach_progress(model, log)
+    _force_dataloader_workers(model, DATALOADER_WORKERS, log)
     results = model.train(
         data=str(yaml_path),
         epochs=epochs,
@@ -151,7 +169,7 @@ def train_yolo(
         name=run_name,
         exist_ok=False,
         verbose=True,
-        workers=0,
+        workers=DATALOADER_WORKERS,
         device=device,
         amp=amp,
         degrees=ROTATION_DEGREES,
@@ -172,7 +190,9 @@ def train_yolo(
     used_folders = sorted(folders) if folders is not None else list_data_folders()
     dest.with_suffix(".txt").write_text(
         f"YOLO {task} ({model_name})\n"
-        f"labels: {'four keypoints' if task == 'pose' else 'polygon'} parking_space (occupancy ignored)\n"
+        f"labels: "
+        f"{'four keypoints' if task == 'pose' else 'bbox' if task == 'detect' else 'polygon'}"
+        f" parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
         f"data: {', '.join(used_folders)}\n"
         f"file: {dest.name}\nsource_run: {best}\n",

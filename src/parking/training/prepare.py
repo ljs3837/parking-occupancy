@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import random
 import shutil
 import xml.etree.ElementTree as ET
@@ -14,6 +15,8 @@ from parking.training.occlusion import occlude_slots
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
+# Mac(MPS)은 학습이 느려서, 고정 CCTV 성격의 허깅페이스는 균등 샘플만 쓴다.
+HF_MAC_FRACTION = 0.2
 
 
 def next_model_path(directory: Path, stem: str) -> Path:
@@ -47,6 +50,24 @@ def _is_human_cctv(sample: dict) -> bool:
 
 def _is_huggingface(sample: dict) -> bool:
     return str(sample.get("rel") or "").startswith("huggingface/")
+
+
+def _is_mac() -> bool:
+    return platform.system() == "Darwin"
+
+
+def _even_fraction(items: list, fraction: float) -> list:
+    """정렬된 목록에서 간격을 맞춰 fraction 비율만 고른다. 시드 셔플이 아니라 골고루 샘플."""
+    if fraction >= 1.0 or len(items) <= 1:
+        return list(items)
+    count = max(1, int(round(len(items) * fraction)))
+    if count >= len(items):
+        return list(items)
+    if count == 1:
+        return [items[len(items) // 2]]
+    last = len(items) - 1
+    indices = [round(i * last / (count - 1)) for i in range(count)]
+    return [items[index] for index in indices]
 
 
 def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
@@ -362,6 +383,16 @@ def collect_samples(log, folders: set[str] | None = None) -> list[dict]:
     if allowed is not None:
         huggingface = [item for item in huggingface if _in_selected_folder(str(item.get("rel") or ""), allowed)]
         kaggle = [item for item in kaggle if _in_selected_folder(str(item.get("rel") or ""), allowed)]
+    if _is_mac() and huggingface:
+        before = len(huggingface)
+        huggingface = _even_fraction(
+            sorted(huggingface, key=lambda item: str(item.get("rel") or "")),
+            HF_MAC_FRACTION,
+        )
+        log(
+            f"[데이터] Mac: 허깅페이스 {before}장 → 균등 {len(huggingface)}장 "
+            f"({HF_MAC_FRACTION:.0%})"
+        )
     total = len(local) + len(huggingface) + len(kaggle)
     chosen = "전체" if allowed is None else ", ".join(sorted(allowed))
     log(
@@ -401,13 +432,32 @@ def _pose_labels(polygons: list[dict]) -> list[str]:
     return label_rows(slots, "pose").splitlines()
 
 
+def _detect_label(points: list) -> str | None:
+    """폴리곤을 YOLO detect bbox(cx, cy, w, h)로 바꾼다."""
+    xs = [min(1.0, max(0.0, float(x))) for x, _ in points]
+    ys = [min(1.0, max(0.0, float(y))) for _, y in points]
+    if not xs or not ys:
+        return None
+    x1, x2 = min(xs), max(xs)
+    y1, y2 = min(ys), max(ys)
+    width, height = x2 - x1, y2 - y1
+    if width <= 0 or height <= 0:
+        return None
+    return f"0 {(x1 + x2) / 2:.6f} {(y1 + y2) / 2:.6f} {width:.6f} {height:.6f}"
+
+
 def build_yolo_dataset(
     log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT, folders=None, task="segment"
 ) -> Path:
-    if task not in {"segment", "pose"}:
+    if task not in {"segment", "pose", "detect"}:
         raise ValueError(f"Unsupported parking-space task: {task}")
     samples = list(collect_samples(log, folders) if samples is None else samples)
-    default_dir = YOLO_DATA.with_name("yolo_parking_pose") if task == "pose" else YOLO_DATA
+    if task == "pose":
+        default_dir = YOLO_DATA.with_name("yolo_parking_pose")
+    elif task == "detect":
+        default_dir = YOLO_DATA.with_name("yolo_parking_detect")
+    else:
+        default_dir = YOLO_DATA
     data_dir = (Path(output_dir) if output_dir is not None else default_dir).resolve()
     run_root = RUNS_DIR.resolve()
     if data_dir == run_root or not data_dir.is_relative_to(run_root):
@@ -442,6 +492,11 @@ def build_yolo_dataset(
                 continue
             if task == "pose":
                 polygons.append(poly)
+                continue
+            if task == "detect":
+                line = _detect_label(poly["points"])
+                if line:
+                    lines.append(line)
                 continue
             coords = []
             for x, y in poly["points"]:
