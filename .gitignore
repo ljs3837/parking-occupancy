@@ -33,3 +33,4 @@ Thumbs.db
 
 # Downloadable pretrained initialization, not the fine-tuned result
 /yolo11s-seg.pt
+/yolo11s-pose.pt

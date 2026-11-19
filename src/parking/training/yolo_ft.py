@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from parking.common.device import device_label, gpu_file_slug, use_amp, yolo_device
-from parking.training.prepare import MODELS_DIR, build_yolo_dataset, list_data_folders, next_model_path
+from parking.training.prepare import MODELS_DIR, ROOT, build_yolo_dataset, list_data_folders, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
 # 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
@@ -27,19 +27,28 @@ def train_yolo(
     device = yolo_device()
     amp = use_amp(device)
     log(f"[YOLO] device={device_label()}  amp={amp}")
-    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders)
+    from ultralytics import YOLO
+
+    local_weights = ROOT / model_name
+    model = YOLO(str(local_weights) if local_weights.is_file() else model_name)
+    task = model.task
+    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders, task=task)
     log(f"[YOLO] data={yaml_path}")
     log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
 
     if should_stop and should_stop():
         raise RuntimeError("학습 시작 전 중지됨")
 
-    from ultralytics import YOLO
-
-    dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
+    if task == "pose":
+        stem = Path(model_name).stem.replace("-", "_")
+        base, _, version = stem.rpartition("_")
+        dest = next_model_path(MODELS_DIR / "yolo_corners", base if version.isdigit() else stem)
+    else:
+        dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
     run_name = dest.stem
     log(f"[YOLO] 저장 파일: {dest.name}")
-    model = YOLO(model_name)
+    # Corner identities depend on image orientation.
+    augmentation = {"fliplr": 0.0} if task == "pose" else {}
     results = model.train(
         data=str(yaml_path),
         epochs=epochs,
@@ -54,6 +63,7 @@ def train_yolo(
         amp=amp,
         degrees=ROTATION_DEGREES,
         patience=max(3, epochs),
+        **augmentation,
     )
 
     best = Path(results.save_dir) / "weights" / "best.pt"
@@ -68,8 +78,8 @@ def train_yolo(
 
     used_folders = sorted(folders) if folders is not None else list_data_folders()
     dest.with_suffix(".txt").write_text(
-        f"YOLO segmentation ({model_name})\n"
-        "labels: polygon parking_space (occupancy ignored)\n"
+        f"YOLO {task} ({model_name})\n"
+        f"labels: {'four keypoints' if task == 'pose' else 'polygon'} parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
         f"data: {', '.join(used_folders)}\n"
         f"file: {dest.name}\nsource_run: {best}\n",

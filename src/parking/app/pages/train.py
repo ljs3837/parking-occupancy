@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from parking.training.prepare import list_data_folders
+from parking.training.prepare import MODELS_DIR, list_data_folders
 
-# 주차칸 폴리곤 파인튜닝에 쓰는 분할 모델. 값은 Ultralytics 가중치 파일명.
+# 주차칸 분할과 꼭짓점 파인튜닝에 쓰는 Ultralytics 가중치.
 YOLO_MODELS = (
     ("YOLOv8n-seg", "yolov8n-seg.pt"),
     ("YOLOv8s-seg", "yolov8s-seg.pt"),
@@ -29,6 +29,7 @@ YOLO_MODELS = (
     ("YOLO11s-seg", "yolo11s-seg.pt"),
     ("YOLO11m-seg", "yolo11m-seg.pt"),
     ("YOLO11l-seg", "yolo11l-seg.pt"),
+    ("YOLO11s-pose", "yolo11s-pose.pt"),
 )
 
 
@@ -99,6 +100,8 @@ class ModelCard(QFrame):
         self.model = QComboBox()
         for label, weights in YOLO_MODELS:
             self.model.addItem(label, weights)
+        for weights in sorted((MODELS_DIR / "yolo_corners").glob("*.pt")):
+            self.model.addItem(f"Pose · {weights.stem}", str(weights))
         self.model.setCurrentIndex(self.model.findData("yolo11s-seg.pt"))
         self.subtitle.setText(self.model.currentText())
         self.model.currentIndexChanged.connect(self._sync_subtitle)

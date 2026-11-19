@@ -272,9 +272,43 @@ def collect_samples(log, folders: set[str] | None = None) -> list[dict]:
     return local + huggingface + kaggle
 
 
-def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT, folders=None) -> Path:
+def _pose_labels(polygons: list[dict]) -> list[str]:
+    import cv2
+    import numpy as np
+
+    from parking.training.improved_data import label_rows, ordered_quad
+
+    slots = []
+    for polygon in polygons:
+        points = np.asarray(polygon["points"], dtype=np.float32)
+        if not np.isfinite(points).all():
+            continue
+        points = np.clip(points, 0, 1)
+        quad = ordered_quad(points)
+        if quad is None:
+            hull = cv2.convexHull(points)
+            if len(hull) > 4:
+                corners = cv2.approxPolyN(hull, 4)
+            elif len(hull) == 4:
+                corners = hull
+            elif len(hull) == 3:
+                corners = cv2.boxPoints(cv2.minAreaRect(hull))
+            else:
+                continue
+            quad = ordered_quad(np.clip(corners, 0, 1))
+        if quad is not None:
+            slots.append({"points": quad})
+    return label_rows(slots, "pose").splitlines()
+
+
+def build_yolo_dataset(
+    log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT, folders=None, task="segment"
+) -> Path:
+    if task not in {"segment", "pose"}:
+        raise ValueError(f"Unsupported parking-space task: {task}")
     samples = list(collect_samples(log, folders) if samples is None else samples)
-    data_dir = (Path(output_dir) if output_dir is not None else YOLO_DATA).resolve()
+    default_dir = YOLO_DATA.with_name("yolo_parking_pose") if task == "pose" else YOLO_DATA
+    data_dir = (Path(output_dir) if output_dir is not None else default_dir).resolve()
     run_root = RUNS_DIR.resolve()
     if data_dir == run_root or not data_dir.is_relative_to(run_root):
         raise ValueError("Dataset output must be a subdirectory of outputs/train")
@@ -291,6 +325,7 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_T
 
     n_img = 0
     n_occluded = 0
+    pose_counts = {"train": 0, "val": 0}
     for split, s in rows:
         src = Path(s["path"])
         stem = f"{src.stem}_{n_img}"
@@ -298,20 +333,28 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_T
         shutil.copy2(src, dst_img)
 
         lines = []
+        polygons = []
         for poly in s["polygons"]:
             # 점유(empty/occupied)는 무시하고 주차칸 좌표만 단일 클래스로 학습한다.
             if poly.get("label") == "occlusion" or poly.get("status") == "occlusion":
                 continue
             if len(poly["points"]) < 3:
                 continue
+            if task == "pose":
+                polygons.append(poly)
+                continue
             coords = []
             for x, y in poly["points"]:
                 coords.append(f"{min(1.0, max(0.0, x)):.6f}")
                 coords.append(f"{min(1.0, max(0.0, y)):.6f}")
             lines.append("0 " + " ".join(coords))
+        if task == "pose":
+            lines = _pose_labels(polygons)
         if not lines:
             dst_img.unlink(missing_ok=True)
             continue
+        if task == "pose":
+            pose_counts[split] += 1
         (data_dir / "labels" / split / f"{stem}.txt").write_text(
             "\n".join(lines) + "\n",
             encoding="utf-8",
@@ -337,6 +380,9 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_T
         n_img += 1
 
     log(f"[YOLO] synthetic partial occlusion: {n_occluded} train images; full labels retained")
+    if task == "pose" and not all(pose_counts.values()):
+        raise RuntimeError("Pose 학습과 검증에 각각 꼭짓점 라벨이 있는 이미지가 필요합니다.")
+    keypoint_config = ["kpt_shape: [4, 3]"] if task == "pose" else []
     yaml_path = data_dir / "data.yaml"
     yaml_path.write_text(
         "\n".join(
@@ -346,6 +392,7 @@ def build_yolo_dataset(log, *, samples=None, output_dir=None, cctv_repeat=CCTV_T
                 "val: images/val",
                 "names:",
                 "  0: parking_space",
+                *keypoint_config,
                 "",
             ]
         ),
