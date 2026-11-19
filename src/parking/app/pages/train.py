@@ -103,21 +103,16 @@ class ModelCard(QFrame):
 
         form = QFormLayout()
         self.model = QComboBox()
-        for label, weights in YOLO_MODELS:
-            self.model.addItem(label, weights)
-        for weights in sorted((MODELS_DIR / "yolo_corners").glob("*.pt")):
-            self.model.addItem(f"Pose · {weights.stem}", str(weights))
-        self.model.setCurrentIndex(self.model.findData("yolo11s-seg.pt"))
-        self.subtitle.setText(self.model.currentText())
-        self.model.currentIndexChanged.connect(self._sync_subtitle)
+        self.reload_models()
         self.epochs = QSpinBox()
         self.epochs.setRange(1, 200)
         self.epochs.setValue(5)
+        self.epoch_label = QLabel()
         self.batch = QSpinBox()
         self.batch.setRange(1, 128)
         self.batch.setValue(4)
-        form.addRow("YOLO", self.model)
-        form.addRow("epochs", self.epochs)
+        form.addRow("시작 모델", self.model)
+        form.addRow(self.epoch_label, self.epochs)
         form.addRow("batch", self.batch)
         self.test_preset = QComboBox()
         self.test_preset.addItem("기존 설정", False)
@@ -143,12 +138,29 @@ class ModelCard(QFrame):
         self.reload_folders()
 
         self.btn = QPushButton("학습 시작")
+        self.model.currentIndexChanged.connect(self._sync_model)
+        self._sync_model()
         self.btn.clicked.connect(self.start_clicked.emit)
         layout.addWidget(self.btn)
         layout.addStretch(1)
 
-    def _sync_subtitle(self):
+    def reload_models(self) -> None:
+        selected = self.model.currentData() or "yolo11s-seg.pt"
+        self.model.clear()
+        for label, weights in YOLO_MODELS:
+            self.model.addItem(label, weights)
+        for directory in ("yolo_spaces", "yolo_corners"):
+            for weights in sorted((MODELS_DIR / directory).glob("*.pt")):
+                if weights.is_file():
+                    self.model.addItem(f"추가 학습 · {weights.name}", str(weights))
+        index = self.model.findData(selected)
+        self.model.setCurrentIndex(index if index >= 0 else self.model.findData("yolo11s-seg.pt"))
+
+    def _sync_model(self):
+        saved_model = self.model.currentIndex() >= len(YOLO_MODELS)
         self.subtitle.setText(self.model.currentText())
+        self.epoch_label.setText("추가 에폭" if saved_model else "에폭")
+        self.btn.setText("추가 학습 시작" if saved_model else "학습 시작")
 
     def reload_folders(self) -> None:
         previous = {
@@ -225,6 +237,11 @@ class TrainPage(QWidget):
         self.log.setMinimumHeight(220)
         root.addWidget(self.log, 1)
 
+    def showEvent(self, event):
+        if self.worker is None or not self.worker.isRunning():
+            self.yolo_card.reload_models()
+        super().showEvent(event)
+
     def _append(self, msg: str):
         self.log.append(msg)
         self.status_message.emit(msg[:80])
@@ -262,6 +279,7 @@ class TrainPage(QWidget):
             self._append("[UI] 중지 요청… (현재 epoch/배치 끝난 뒤 반영)")
 
     def _on_done(self, path: str):
+        self.yolo_card.reload_models()
         self._set_busy(False)
         self._append(f"=== 완료: {path} ===")
         QMessageBox.information(self, "학습 완료", f"가중치 저장:\n{path}")
