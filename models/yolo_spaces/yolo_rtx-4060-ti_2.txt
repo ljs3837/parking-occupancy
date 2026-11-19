@@ -1,0 +1,6 @@
+YOLO segment (yolo11s-seg.pt)
+labels: polygon parking_space (occupancy ignored)
+device: CUDA:0 (NVIDIA GeForce RTX 4060 Ti)
+data: cctv, cctv_image, huggingface, kaggle
+file: yolo_rtx-4060-ti_2.pt
+source_run: C:\Users\ljs38\OneDrive\바탕 화면\parking-occupancy\models\_runs\yolo_rtx-4060-ti_2\weights\best.pt
