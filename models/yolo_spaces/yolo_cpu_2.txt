@@ -1,0 +1,6 @@
+YOLO detect (yolov8n.pt)
+labels: bbox parking_space (occupancy ignored)
+device: CPU
+data: cctv, cctv_image
+file: yolo_cpu_2.pt
+source_run: D:\00_MY\00_Work\MY 01\do_it\100_Projects\parking-occupancy\models\_runs\yolo_cpu_2\weights\best.pt
