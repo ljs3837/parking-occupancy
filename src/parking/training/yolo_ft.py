@@ -12,6 +12,13 @@ from parking.training.prepare import MODELS_DIR, ROOT, build_yolo_dataset, list_
 OUT_DIR = MODELS_DIR / "yolo_spaces"
 # 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
 ROTATION_DEGREES = 15.0
+TEST_ROUND_2_AUGMENTATION = {
+    "degrees": 5.0,
+    "perspective": 0.0,
+    "scale": 0.15,
+    "translate": 0.03,
+    "mosaic": 0.0,
+}
 # Ultralytics는 MPS/CPU에서 workers를 0으로 강제한다. 아래에서 콜백으로 다시 올린다.
 DATALOADER_WORKERS = 4
 
@@ -130,6 +137,7 @@ def train_yolo(
     model_name: str = "yolo11s-seg.pt",
     data_yaml: Path | None = None,
     folders: set[str] | None = None,
+    test_round_2: bool = False,
     log=print,
     should_stop=None,
 ) -> Path:
@@ -141,9 +149,17 @@ def train_yolo(
     local_weights = ROOT / model_name
     model = YOLO(str(local_weights) if local_weights.is_file() else model_name)
     task = model.task
+    augmentation = {"degrees": ROTATION_DEGREES}
+    if test_round_2:
+        augmentation.update(TEST_ROUND_2_AUGMENTATION)
+    if task == "pose":
+        # Corner identities depend on image orientation.
+        augmentation["fliplr"] = 0.0
     yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders, task=task)
     log(f"[YOLO] data={yaml_path}")
-    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
+    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}")
+    augmentation_text = ", ".join(f"{key}={value:g}" for key, value in augmentation.items())
+    log(f"[YOLO] 증강: {augmentation_text}")
 
     if should_stop and should_stop():
         raise RuntimeError("학습 시작 전 중지됨")
@@ -156,8 +172,6 @@ def train_yolo(
         dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
     run_name = dest.stem
     log(f"[YOLO] 저장 파일: {dest.name}")
-    # Corner identities depend on image orientation.
-    augmentation = {"fliplr": 0.0} if task == "pose" else {}
     _attach_progress(model, log)
     _force_dataloader_workers(model, DATALOADER_WORKERS, log)
     results = model.train(
@@ -172,7 +186,6 @@ def train_yolo(
         workers=DATALOADER_WORKERS,
         device=device,
         amp=amp,
-        degrees=ROTATION_DEGREES,
         patience=max(3, epochs),
         **augmentation,
     )
@@ -195,6 +208,7 @@ def train_yolo(
         f" parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
         f"data: {', '.join(used_folders)}\n"
+        f"augmentation: {augmentation_text}\n"
         f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )

@@ -18,6 +18,29 @@ def _quad(points, fit="conservative"):
     return None
 
 
+def straightened_outline(points: np.ndarray) -> np.ndarray:
+    """Draw a fitted quadrilateral or simplify the outline into straight segments."""
+    if len(points) <= 4:
+        return points
+    contour = points.astype(np.float32)
+    quad = _quad(contour)
+    if quad is not None:
+        hull = cv2.convexHull(contour)
+        hull_area = cv2.contourArea(hull)
+        if hull_area > 0 and cv2.contourArea(contour) >= 0.9 * hull_area:
+            intersection, _ = cv2.intersectConvexConvex(hull, quad)
+            union = hull_area + cv2.contourArea(quad) - intersection
+            if union > 0 and intersection / union >= 0.9:
+                return quad
+
+    _, _, width, height = cv2.boundingRect(contour)
+    tolerance = min(12.0, max(2.0, min(width, height) * 0.08))
+    polygon = cv2.approxPolyDP(contour, tolerance, True).reshape(-1, 2)
+    if len(polygon) < 3:
+        polygon = cv2.approxPolyDP(contour, tolerance / 4, True).reshape(-1, 2)
+    return polygon if len(polygon) >= 3 else points
+
+
 def refine_spaces(frame, detections, *, strict_quadrilaterals=True, snap_lines=True, quad_fit="conservative"):
     """Return copies; quadrilateral candidates survive missing line evidence.
 
