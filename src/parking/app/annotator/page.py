@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    _shares_polygons, annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
+    _shares_polygons, annot_path, apply_folder_annotations, has_source_annotation, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -26,7 +26,7 @@ class _AnnotatedFsModel(QFileSystemModel):
                     rel = path.resolve().relative_to(DATA_DIR.resolve())
                 except (OSError, ValueError):
                     rel = None
-                if rel is not None and annot_path(rel).exists():
+                if rel is not None and has_source_annotation(rel.as_posix()):
                     return QColor("#2ec4b6")
         return super().data(index, role)
 
