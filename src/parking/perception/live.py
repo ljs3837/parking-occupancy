@@ -84,7 +84,8 @@ class LiveDetector:
         self.path = VEHICLE_WEIGHTS
         self.label = "YOLOv8n 차량만"
         self._lock = threading.Lock()
-        self._space_options = {}
+        # 관제 UI에서 고른 추론 옵션. 모델 옆 JSON이 아니라 여기가 기준이다.
+        self._inference = {"tiled": False, "inference_imgsz": 640}
 
     def use(self, kind: str, path: str, label: str):
         with self._lock:
@@ -95,23 +96,27 @@ class LiveDetector:
             self._vehicle_model = None
             self._ready = False
 
+    def set_inference(self, *, tiled: bool | None = None, imgsz: int | None = None) -> None:
+        """관제 사이드바에서 타일/입력 크기를 바로 반영한다."""
+        with self._lock:
+            if tiled is not None:
+                self._inference["tiled"] = bool(tiled)
+            if imgsz is not None:
+                size = int(imgsz)
+                self._inference["inference_imgsz"] = size if size in (640, 960, 1280) else 640
+
+    def inference_options(self) -> dict:
+        with self._lock:
+            return dict(self._inference)
+
     def ensure(self) -> str:
         if self._ready:
             return self.label
         from ultralytics import YOLO
 
         self._vehicle_model = YOLO(VEHICLE_WEIGHTS)
-        self._space_options = {}
         if self.kind == "occupancy":
             self._space_model = YOLO(self.path)
-            metadata = Path(self.path).with_suffix(".json")
-            if metadata.is_file():
-                try:
-                    options = json.loads(metadata.read_text(encoding="utf-8"))
-                    if isinstance(options, dict):
-                        self._space_options = options
-                except (OSError, ValueError):
-                    pass
         else:
             self._space_model = None
         self._ready = True
@@ -124,12 +129,12 @@ class LiveDetector:
             if self._vehicle_model is not None:
                 boxes.extend(self._yolo_boxes(frame_bgr, self._vehicle_model, "coco"))
             if self.kind == "occupancy" and self._space_model is not None:
-                size = int(self._space_options.get("inference_imgsz", 640))
+                size = int(self._inference.get("inference_imgsz", 640))
                 if size not in (640, 960, 1280):
                     size = 640
                 boxes.extend(self.predict_space_candidates(
                     frame_bgr, self._space_model, imgsz=size,
-                    tiled=bool(self._space_options.get("tiled", False))))
+                    tiled=bool(self._inference.get("tiled", False))))
             return boxes
 
     def predict_space_candidates(self, frame_bgr, model, *, imgsz=640, tiled=False):

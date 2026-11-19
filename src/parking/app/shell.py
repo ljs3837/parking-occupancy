@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QFrame,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -91,12 +94,31 @@ class AppShell(QMainWindow):
         self.model_list.itemClicked.connect(self.select_model)
         nav_layout.addWidget(self.model_list)
 
+        infer_title = QLabel("추론 설정")
+        infer_title.setObjectName("brandSub")
+        nav_layout.addWidget(infer_title)
+        self.tiled_box = QCheckBox("타일 추론")
+        self.tiled_box.setToolTip("전체 화면 + 모서리 크롭으로 주차칸을 찾습니다")
+        self.tiled_box.toggled.connect(self._apply_inference_options)
+        nav_layout.addWidget(self.tiled_box)
+        infer_form = QFormLayout()
+        infer_form.setContentsMargins(0, 0, 0, 0)
+        infer_form.setSpacing(6)
+        self.imgsz_box = QComboBox()
+        for size in (640, 960, 1280):
+            self.imgsz_box.addItem(str(size), size)
+        self.imgsz_box.setCurrentIndex(0)
+        self.imgsz_box.currentIndexChanged.connect(self._apply_inference_options)
+        infer_form.addRow("imgsz", self.imgsz_box)
+        nav_layout.addLayout(infer_form)
+
         layout.addWidget(nav)
         layout.addWidget(self.stack, 1)
 
         self.status = self.statusBar()
         self.status.showMessage("준비")
         self.refresh_models()
+        self._apply_inference_options()
         self.goto("home")
 
     def refresh_models(self):
@@ -121,7 +143,11 @@ class AppShell(QMainWindow):
     def select_model(self, item: QListWidgetItem):
         model = item.data(Qt.ItemDataRole.UserRole)
         DETECTOR.use(model["kind"], model["path"], model["label"])
-        if model["kind"] == "occupancy":
+        occupancy = model["kind"] == "occupancy"
+        self.tiled_box.setEnabled(occupancy)
+        self.imgsz_box.setEnabled(occupancy)
+        self._apply_inference_options()
+        if occupancy:
             self.status.showMessage(
                 f"주차칸: {model['label']}(파랑) + 차량 YOLO(초록) 동시 인식"
             )
@@ -129,6 +155,13 @@ class AppShell(QMainWindow):
             self.status.showMessage("CNN은 지원 예정. 지금은 차량 YOLO만 사용합니다.")
         else:
             self.status.showMessage("차량 YOLO만 인식(초록)")
+
+    def _apply_inference_options(self, *_args):
+        imgsz = self.imgsz_box.currentData()
+        DETECTOR.set_inference(
+            tiled=self.tiled_box.isChecked(),
+            imgsz=int(imgsz) if imgsz is not None else 640,
+        )
 
     def _set_status(self, msg: str):
         self.status.showMessage(msg)
