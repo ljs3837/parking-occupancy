@@ -11,6 +11,7 @@ import numpy as np
 
 from parking.app.paths import ROOT
 from parking.common.device import yolo_device
+from parking.perception.lines import straightened_outline
 from parking.perception.tiling import tiled_candidates
 
 MODELS_DIR = ROOT / "models"
@@ -146,7 +147,7 @@ class LiveDetector:
             frame_bgr,
             verbose=False,
             imgsz=imgsz,
-            conf=0.35,
+            conf=0.375 if kind == "occupancy" else 0.35,
             device=yolo_device(),
         )[0]
         boxes = []
@@ -197,7 +198,8 @@ def draw_detections(frame_bgr: np.ndarray, boxes: list[dict]) -> np.ndarray:
         points = box.get("points")
         if points is not None and len(points) >= 3:
             polygon = np.array(points, dtype=np.int32)
-            cv2.polylines(canvas, [polygon], True, color, 2)
+            outline = straightened_outline(polygon).astype(np.int32) if label in SPACE_LABELS else polygon
+            cv2.polylines(canvas, [outline], True, color, 2)
             x1, y1 = int(polygon[:, 0].min()), int(polygon[:, 1].min())
         else:
             x1, y1, x2, y2 = box["xyxy"]

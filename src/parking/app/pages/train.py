@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from parking.training.prepare import MODELS_DIR, list_data_folders
+from parking.training.yolo_ft import TEST_ROUND_2_AUGMENTATION
 
 # 주차칸 탐지/분할/꼭짓점 파인튜닝에 쓰는 Ultralytics 가중치.
 YOLO_MODELS = (
@@ -40,13 +41,14 @@ class TrainWorker(QThread):
     done = pyqtSignal(str)
     fail = pyqtSignal(str)
 
-    def __init__(self, kind: str, epochs: int, batch: int, model_name: str, folders: list[str]):
+    def __init__(self, kind: str, epochs: int, batch: int, model_name: str, folders: list[str], *, test_round_2: bool = False):
         super().__init__()
         self.kind = kind
         self.epochs = epochs
         self.batch = batch
         self.model_name = model_name
         self.folders = folders
+        self.test_round_2 = test_round_2
         self._stop = False
 
     def request_stop(self):
@@ -67,6 +69,7 @@ class TrainWorker(QThread):
                 batch=self.batch,
                 model_name=self.model_name,
                 folders=set(self.folders),
+                test_round_2=self.test_round_2,
                 log=log,
                 should_stop=self._should_stop,
             )
@@ -116,6 +119,19 @@ class ModelCard(QFrame):
         form.addRow("YOLO", self.model)
         form.addRow("epochs", self.epochs)
         form.addRow("batch", self.batch)
+        self.test_preset = QComboBox()
+        self.test_preset.addItem("기존 설정", False)
+        self.test_preset.addItem("2차 테스트", True)
+        self.test_preset.setCurrentIndex(1)
+        form.addRow("테스트", self.test_preset)
+        self.test_values = QLabel(", ".join(
+            f"{name}={value:g}" for name, value in TEST_ROUND_2_AUGMENTATION.items()
+        ))
+        self.test_values.setWordWrap(True)
+        form.addRow(self.test_values)
+        self.test_preset.currentIndexChanged.connect(
+            lambda: self.test_values.setVisible(bool(self.test_preset.currentData()))
+        )
         layout.addLayout(form)
 
         folder_label = QLabel("data 폴더")
@@ -162,6 +178,7 @@ class ModelCard(QFrame):
         self.model.setEnabled(not busy)
         self.epochs.setEnabled(not busy)
         self.batch.setEnabled(not busy)
+        self.test_preset.setEnabled(not busy)
         self.folders.setEnabled(not busy)
 
 
@@ -229,7 +246,10 @@ class TrainPage(QWidget):
         self._append(
             f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, folders={', '.join(folders)}) ==="
         )
-        self.worker = TrainWorker("yolo", epochs, batch, model_name, folders)
+        self.worker = TrainWorker(
+            "yolo", epochs, batch, model_name, folders,
+            test_round_2=bool(self.yolo_card.test_preset.currentData()),
+        )
         self.worker.log.connect(self._append)
         self.worker.done.connect(self._on_done)
         self.worker.fail.connect(self._on_fail)

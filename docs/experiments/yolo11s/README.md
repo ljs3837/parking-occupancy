@@ -1,6 +1,7 @@
 # YOLO11s 실험 자료
 
 - [실험 결과와 한계](report.md)
+- [앱 학습 기록](../training-runs/README.md)
 - [1차 모델 CCTV 적용 이미지](cctv_stage1.jpg)
 - [추가 학습 모델 CCTV 적용 이미지](cctv_stage2.jpg)
 - [설정별 수치](combined_comparison_stage2.json)
