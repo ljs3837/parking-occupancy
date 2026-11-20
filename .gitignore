@@ -18,6 +18,8 @@ dist/
 !/data/observe/.gitkeep
 !/data/annotations/
 !/data/cctv/
+# AI Hub 원본 복사본. 색인에서 열어 바꾼 Camera/*.json 만 커밋
+/data/annotations/**/label/
 # 학습 로그·그림·best/last 복사본. 앱이 읽는 models/*/*.pt 는 포함
 /models/_runs/
 /outputs/*

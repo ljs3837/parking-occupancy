@@ -222,6 +222,32 @@ class Canvas(QWidget):
         self.update()
         return True
 
+    def replace_with_polygons(self, polygons: list[dict]) -> int:
+        """기존 칸을 지우고 새 칸만 남긴다. 실행 취소로 이전 칸을 되돌린다."""
+        added = []
+        for polygon in polygons:
+            points = [QPointF(float(x), float(y)) for x, y in polygon.get("points") or []]
+            if len(points) < 3:
+                continue
+            added.append(
+                {
+                    "id": polygon.get("id") or f"p_{uuid.uuid4().hex[:8]}",
+                    "points": points,
+                    "tags": list(polygon.get("tags") or ["unknown"]),
+                    "label": polygon.get("label") or "parking_space",
+                    "source_name": polygon.get("source_name"),
+                }
+            )
+        self._record_undo()
+        self.polygons = added
+        self.selected_id = added[-1]["id"] if added else None
+        self.selected_ids = {item["id"] for item in added}
+        self.draft.clear()
+        self.mark_dirty()
+        self.selection_changed.emit()
+        self.update()
+        return len(added)
+
     def undo_last_draft_point(self) -> bool:
         if not self.draft:
             return False
@@ -634,15 +660,7 @@ class Canvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.draft.append(self.clamp01(n))
             self._snap_norm = snap
-            if (
-                self.mode == "draw"
-                and len(self.draft) == 4
-                and self.draw_label != "occlusion"
-                and self.draw_status != "occlusion"
-            ):
-                self.close_draft()
-            else:
-                self.update()
+            self.update()
 
     def mouseMoveEvent(self, event):
         if self._warping:

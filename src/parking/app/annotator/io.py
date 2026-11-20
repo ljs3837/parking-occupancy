@@ -59,16 +59,48 @@ def aihub_label_path(rel: str | Path) -> Path | None:
     return None
 
 
+def _is_aihub_payload(data) -> bool:
+    return isinstance(data, dict) and ("bbox2d" in data or "segmentation" in data) and "parking_spaces" not in data
+
+
+def placed_annotation_paths(rel: str | Path) -> list[Path]:
+    """annotations에 사용자가 넣은 JSON. 사진과 같은 상대경로를 먼저 본다."""
+    image = Path(rel)
+    paths = [annot_path(image)]
+    if image.parent.name == "Camera":
+        paths.append(ANNOT_DIR / image.parent.parent / "label" / f"{image.stem}.json")
+    return paths
+
+
+def _read_json(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def annotation_needs_aihub_convert(rel: str | Path) -> bool:
+    for path in placed_annotation_paths(rel):
+        if not path.is_file():
+            continue
+        data = _read_json(path)
+        if _is_aihub_payload(data):
+            return True
+        if path == annot_path(Path(rel)):
+            return False
+    return False
+
+
 def has_annotation(rel: str | Path) -> bool:
-    """우리 색인 JSON 또는 AI Hub 원본 라벨이 있으면 True."""
+    """우리 색인 JSON 또는 annotations에 넣어 둔 AI Hub JSON이 있으면 True."""
     rel_s = Path(rel).as_posix()
-    if annot_path(Path(rel_s)).is_file():
+    if any(path.is_file() for path in placed_annotation_paths(rel_s)):
         return True
     if shares_folder_annotation(rel_s):
         legacy = ANNOT_DIR / Path(rel_s).with_suffix(".json")
         if legacy.is_file():
             return True
-    return aihub_label_path(rel_s) is not None
+    return False
 
 
 @lru_cache(maxsize=256)
@@ -135,11 +167,10 @@ def polygons_from_aihub(data: dict, width: int, height: int) -> list[dict]:
         if len(points) < 4:
             continue
         index += 1
+        if name in _AIHUB_VEHICLE:
+            continue
         if name in _AIHUB_PARKING_BBOX:
             tags = ["empty"]
-            label = "parking_space"
-        elif name in _AIHUB_VEHICLE:
-            tags = ["occupied"]
             label = "parking_space"
         else:
             continue
@@ -519,10 +550,43 @@ def has_source_annotation(rel: str) -> bool:
         return (DATA_DIR / rel_path).with_suffix(".json").is_file()
     if posix.startswith("kaggle/mmu-parking-slots/"):
         return bool(_mmu_polygons(posix))
-    return False
+    return any(path.is_file() for path in placed_annotation_paths(posix))
+
+
+def _convert_placed_aihub(rel: str) -> list[dict] | None:
+    """annotations에 넣어 둔 AI Hub JSON을 사진과 같은 경로의 색인 형식으로 바꾼다."""
+    source = None
+    data = None
+    target = annot_path(Path(rel))
+    for path in placed_annotation_paths(rel):
+        if not path.is_file():
+            continue
+        loaded = _read_json(path)
+        if _is_aihub_payload(loaded):
+            source, data = path, loaded
+            break
+        if path == target:
+            return None
+    if data is None or source is None:
+        return None
+    image = DATA_DIR / Path(rel)
+    width, height = _image_wh(str(image.resolve())) if image.is_file() else (1920, 1080)
+    polygons = _round_polygons(polygons_from_aihub(data, width, height))
+    if not polygons:
+        return []
+    saved = save_annotation(rel, polygons)
+    if source.resolve() != saved.resolve():
+        try:
+            source.unlink()
+        except OSError:
+            pass
+    return polygons
 
 
 def load_annotation(rel: str) -> list[dict]:
+    converted = _convert_placed_aihub(rel)
+    if converted is not None:
+        return converted
     path = annot_path(Path(rel))
     if path.is_file():
         return _polygons_from_file(path)
@@ -530,14 +594,7 @@ def load_annotation(rel: str) -> list[dict]:
         legacy = ANNOT_DIR / Path(rel).with_suffix(".json")
         if legacy.is_file() and legacy != path:
             return _polygons_from_file(legacy)
-    aihub = aihub_label_path(rel)
-    if aihub is not None:
-        image = DATA_DIR / Path(rel)
-        width, height = _image_wh(str(image.resolve())) if image.is_file() else (1920, 1080)
-        data = json.loads(aihub.read_text(encoding="utf-8"))
-        return polygons_from_aihub(data, width, height)
-    return []
-
+    return external_polygons(rel)
 
 def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> list[dict]:
     """같은 폴더가 공유하는 칸. current는 예전 호출과의 호환용이다."""
@@ -612,6 +669,57 @@ def save_annotation(rel: str, polygons: list[dict], *, update_layout: bool = Tru
     return ap
 
 
+def _round_polygons(polygons: list[dict], digits: int = 6) -> list[dict]:
+    rounded = []
+    for polygon in polygons:
+        item = dict(polygon)
+        item["points"] = [
+            [round(float(x), digits), round(float(y), digits)]
+            for x, y in polygon.get("points") or []
+        ]
+        rounded.append(item)
+    return rounded
+
+
+def import_aihub_annotations(
+    *,
+    under: str | Path = "blackbox",
+    overwrite: bool = False,
+) -> dict[str, int]:
+    """AI Hub 원본 라벨을 annotations/(사진과 같은 경로).json 색인 형식으로 저장한다."""
+    root = DATA_DIR / Path(under)
+    stats = {"scanned": 0, "written": 0, "skipped_existing": 0, "skipped_empty": 0, "missing_label": 0}
+    if not root.is_dir():
+        return stats
+    for image in sorted(root.rglob("*")):
+        if not image.is_file() or image.suffix.lower() not in IMAGE_EXTS:
+            continue
+        if image.parent.name != "Camera":
+            continue
+        try:
+            rel = image.relative_to(DATA_DIR).as_posix()
+        except ValueError:
+            continue
+        stats["scanned"] += 1
+        label = aihub_label_path(rel)
+        if label is None:
+            stats["missing_label"] += 1
+            continue
+        out = annot_path(Path(rel))
+        if out.is_file() and not overwrite:
+            stats["skipped_existing"] += 1
+            continue
+        width, height = _image_wh(str(image.resolve()))
+        data = json.loads(label.read_text(encoding="utf-8"))
+        polygons = _round_polygons(polygons_from_aihub(data, width, height))
+        if not polygons:
+            stats["skipped_empty"] += 1
+            continue
+        save_annotation(rel, polygons)
+        stats["written"] += 1
+    return stats
+
+
 def consolidate_cctv_annotations() -> list[str]:
     """cctv_image 하위 폴더의 사진별 JSON을 _layout.json 하나로 합친다."""
     root = ANNOT_DIR / "cctv_image"
@@ -657,6 +765,15 @@ def consolidate_cctv_annotations() -> list[str]:
     return notes
 
 
+def _is_raw_label_dir(path: Path) -> bool:
+    """data/annotations/**/label/** 는 검수 전 AI Hub 원본이라 학습에서 뺀다."""
+    try:
+        rel = path.resolve().relative_to(ANNOT_DIR.resolve())
+    except (OSError, ValueError):
+        return False
+    return "label" in rel.parts
+
+
 def iter_annotation_sources() -> list[tuple[str, list[dict]]]:
     """학습용 (이미지 상대경로, 칸 목록). 공유 폴더는 사진 수만큼 같은 칸을 쓴다."""
     rows: list[tuple[str, list[dict]]] = []
@@ -683,7 +800,7 @@ def iter_annotation_sources() -> list[tuple[str, list[dict]]]:
     if not ANNOT_DIR.is_dir():
         return rows
     for path in sorted(ANNOT_DIR.rglob("*.json")):
-        if path.name.startswith("_"):
+        if path.name.startswith("_") or _is_raw_label_dir(path):
             continue
         try:
             under = path.relative_to(cctv)
