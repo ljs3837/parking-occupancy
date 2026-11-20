@@ -57,6 +57,30 @@ class _DataTreeView(QTreeView):
         if self._on_resize is not None:
             self._on_resize()
 
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            index = self.currentIndex()
+            if index.isValid() and self.model() is not None and self.model().hasChildren(index):
+                if key == Qt.Key.Key_Right and not self.isExpanded(index):
+                    self.expand(index)
+                    event.accept()
+                    return
+                if key == Qt.Key.Key_Left and self.isExpanded(index):
+                    self.collapse(index)
+                    event.accept()
+                    return
+            if key == Qt.Key.Key_Left and index.isValid():
+                parent = index.parent()
+                root = self.rootIndex()
+                if parent.isValid() and parent != root:
+                    if self.isExpanded(parent):
+                        self.collapse(parent)
+                    self.setCurrentIndex(parent)
+                    event.accept()
+                    return
+        super().keyPressEvent(event)
+
 
 class AnnotatorPage(QWidget):
     status_message = pyqtSignal(str)
@@ -104,13 +128,10 @@ class AnnotatorPage(QWidget):
         self.search.setPlaceholderText("이름 검색")
         self.search.textChanged.connect(self._filter_files)
         side_layout.addWidget(self.search)
-        self.file_stats = QLabel("data 폴더")
+        self.file_stats = QLabel("폴더를 선택하면 사진 장수가 표시됩니다")
         self.file_stats.setWordWrap(True)
+        self.file_stats.setStyleSheet("color:#dbe7f5;font-weight:600;padding:6px 0;")
         side_layout.addWidget(self.file_stats)
-        self.dashboard_label = QLabel()
-        self.dashboard_label.setWordWrap(True)
-        self.dashboard_label.setStyleSheet("color:#dbe7f5;font-weight:600;padding:6px 0;")
-        side_layout.addWidget(self.dashboard_label)
         self.fs_model = _AnnotatedFsModel(self)
         self.fs_model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
         root_index = self.fs_model.setRootPath(str(DATA_DIR))
@@ -196,6 +217,9 @@ class AnnotatorPage(QWidget):
             shortcut = QShortcut(QKeySequence(Qt.Key.Key_Delete), widget)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(self._delete_selected_polygon)
+        file_delete = QShortcut(QKeySequence(Qt.Key.Key_Delete), self.file_tree)
+        file_delete.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        file_delete.activated.connect(self._delete_selected_file)
         QShortcut(QKeySequence("Ctrl+R"), self, activated=self._delete_selected_file)
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self.save_current)
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
@@ -318,10 +342,41 @@ class AnnotatorPage(QWidget):
         query = (query or "").strip().lower()
         self.file_proxy.query = query
         self.file_proxy.invalidateFilter()
-        self.file_stats.setText("data 폴더" if not query else f"이름 검색: {query}")
+        self._update_folder_photo_count()
+
+    def _count_images_in_folder(self, folder: Path) -> int:
+        if not folder.is_dir():
+            return 0
+        try:
+            return sum(1 for path in folder.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_EXTS)
+        except OSError:
+            return 0
+
+    def _update_folder_photo_count(self, proxy_index=None):
+        query = (self.search.text() or "").strip()
+        if proxy_index is None:
+            proxy_index = self.file_tree.currentIndex()
+        folder: Path | None = None
+        if proxy_index.isValid():
+            source = self.file_proxy.mapToSource(proxy_index)
+            if source.isValid():
+                path = Path(self.fs_model.filePath(source))
+                folder = path if self.fs_model.isDir(source) else path.parent
+        if folder is None or not folder.exists():
+            folder = DATA_DIR
+        count = self._count_images_in_folder(folder)
+        try:
+            rel = folder.resolve().relative_to(DATA_DIR.resolve()).as_posix() or "."
+        except (OSError, ValueError):
+            rel = folder.name or "data"
+        text = f"{rel} · 사진 {count}장"
+        if query:
+            text = f"{text} · 검색: {query}"
+        self.file_stats.setText(text)
 
     def _on_tree_current_changed(self, current, _previous):
         self._reveal_tree_index(current)
+        self._update_folder_photo_count(current)
         self._open_tree_index(current)
 
     def _reveal_tree_index(self, proxy_index):
@@ -424,6 +479,7 @@ class AnnotatorPage(QWidget):
                 self.open_image(next_rel)
             except Exception as exc:
                 self.status_message.emit(f"삭제됨: {rel} / 다음 이미지 열기 실패: {exc}")
+            self._update_folder_photo_count()
             return
         self.canvas.image = None
         self.canvas.polygons.clear()
@@ -431,6 +487,7 @@ class AnnotatorPage(QWidget):
         self.canvas.selected_ids = set()
         self.canvas.update()
         self._refresh_inspector()
+        self._update_folder_photo_count()
 
     def confirm_leave(self) -> bool:
         self._flush_autosave()
@@ -486,11 +543,9 @@ class AnnotatorPage(QWidget):
     def _refresh_inspector(self):
         self._updating_poly_list = True
         self.poly_list.clear()
-        counts = {"empty": 0, "occupied": 0, "unknown": 0, "occlusion": 0}
         for index, polygon in enumerate(self.canvas.polygons):
             state = "occlusion" if polygon.get("label") == "occlusion" or "occlusion" in polygon.get("tags", []) else occupancy_of(polygon["tags"])
             state_name = {"empty": "차 없음", "occupied": "차 있음", "unknown": "미정", "occlusion": "가림"}.get(state, state)
-            counts[state] += 1
             source = polygon.get("source_name")
             title = f"{state_name}/{source}" if source else state_name
             item = QListWidgetItem(f"#{index + 1}  {title}  ({len(polygon['points'])}개 꼭짓점)")
@@ -499,10 +554,6 @@ class AnnotatorPage(QWidget):
             if polygon["id"] in self.canvas.selected_ids or polygon["id"] == self.canvas.selected_id:
                 item.setSelected(True)
         self._updating_poly_list = False
-        self.dashboard_label.setText(
-            f"주차 현황 | 전체 {sum(counts.values())} | 차 없음 {counts['empty']} | "
-            f"차 있음 {counts['occupied']} | 미정 {counts['unknown']} | 가림 {counts['occlusion']}"
-        )
 
     def _on_poly_selection(self):
         if self._updating_poly_list:
