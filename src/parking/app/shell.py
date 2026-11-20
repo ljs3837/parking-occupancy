@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFrame,
     QFormLayout,
@@ -97,10 +96,6 @@ class AppShell(QMainWindow):
         infer_title = QLabel("추론 설정")
         infer_title.setObjectName("brandSub")
         nav_layout.addWidget(infer_title)
-        self.tiled_box = QCheckBox("타일 추론")
-        self.tiled_box.setToolTip("전체 화면 + 모서리 크롭으로 주차칸을 찾습니다")
-        self.tiled_box.toggled.connect(self._apply_inference_options)
-        nav_layout.addWidget(self.tiled_box)
         infer_form = QFormLayout()
         infer_form.setContentsMargins(0, 0, 0, 0)
         infer_form.setSpacing(6)
@@ -144,7 +139,6 @@ class AppShell(QMainWindow):
         model = item.data(Qt.ItemDataRole.UserRole)
         DETECTOR.use(model["kind"], model["path"], model["label"])
         occupancy = model["kind"] == "occupancy"
-        self.tiled_box.setEnabled(occupancy)
         self.imgsz_box.setEnabled(occupancy)
         self._apply_inference_options()
         if occupancy:
@@ -158,10 +152,7 @@ class AppShell(QMainWindow):
 
     def _apply_inference_options(self, *_args):
         imgsz = self.imgsz_box.currentData()
-        DETECTOR.set_inference(
-            tiled=self.tiled_box.isChecked(),
-            imgsz=int(imgsz) if imgsz is not None else 640,
-        )
+        DETECTOR.set_inference(imgsz=int(imgsz) if imgsz is not None else 640)
 
     def _set_status(self, msg: str):
         self.status.showMessage(msg)

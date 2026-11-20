@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    _shares_polygons, annot_path, apply_folder_annotations, has_source_annotation, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
+    _shares_polygons, annot_path, annotation_needs_aihub_convert, apply_folder_annotations, has_source_annotation, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -112,7 +112,8 @@ class AnnotatorPage(QWidget):
         for text, slot in [
             ("닫기 (Space)", self.canvas.close_draft), ("복사", self._copy),
             ("붙여넣기", self._paste), ("색인 삭제", self._delete_selected_polygon),
-            ("맞춤", self.canvas.fit), ("폴더 칸 적용", self._apply_folder_polygons),
+            ("맞춤", self.canvas.fit), ("자동색인 (A)", self._auto_annotate),
+            ("폴더 칸 적용", self._apply_folder_polygons),
             ("저장", self.save_current),
             ("실행 취소", self._undo), ("다시 실행", self._redo),
         ]:
@@ -177,7 +178,7 @@ class AnnotatorPage(QWidget):
         side_layout.addWidget(self.poly_list)
         hint = QLabel(
             "같은 폴더 사진은 색인 JSON 하나를 공유 · "
-            "New_Sample/실외 원천사진은 AI Hub 라벨을 자동 표시 · "
+            "annotations의 AI Hub JSON은 사진을 열면 색인 형식으로 바뀜 · "
             "E 로 상태 전환 · 주차칸은 꼭짓점 4개 클릭 시 자동 확정 · "
             "그리기 중 Ctrl을 누르면 가까운 꼭짓점에 붙음 · "
             "Backspace: 마지막 점 취소 · Esc: 전체 취소"
@@ -202,6 +203,7 @@ class AnnotatorPage(QWidget):
         self._refresh_inspector()
 
     def _bind_shortcuts(self):
+        QShortcut(QKeySequence("A"), self, activated=self._auto_annotate)
         QShortcut(QKeySequence("D"), self, activated=lambda: self.mode_box.setCurrentIndex(0))
         QShortcut(QKeySequence("V"), self, activated=lambda: self.mode_box.setCurrentIndex(1))
         QShortcut(QKeySequence("E"), self, activated=lambda: self.mode_box.setCurrentIndex(2))
@@ -498,10 +500,58 @@ class AnnotatorPage(QWidget):
             return
         if not self.confirm_leave():
             return
+        needs_convert = annotation_needs_aihub_convert(rel)
         self.canvas.load_image(DATA_DIR / rel, load_annotation(rel))
         self.current_path = rel
-        self.status_message.emit(f"불러옴: {rel}")
+        if needs_convert:
+            self.status_message.emit(f"AI Hub 색인을 사용 형식으로 변환함: {rel}")
+            index = self.fs_model.index(str((DATA_DIR / rel).resolve()))
+            if index.isValid():
+                self.fs_model.dataChanged.emit(index, index, [Qt.ItemDataRole.ForegroundRole])
+        else:
+            self.status_message.emit(f"불러옴: {rel}")
         self._refresh_inspector()
+
+    def _open_frame_bgr(self):
+        """색인에 이미 떠 있는 사진을 모델 입력으로 쓴다."""
+        import cv2
+        import numpy as np
+        from PyQt6.QtGui import QImage
+
+        image = self.canvas.image
+        if image is None or image.isNull():
+            return None
+        converted = image.convertToFormat(QImage.Format.Format_RGB888)
+        width, height = converted.width(), converted.height()
+        pointer = converted.bits()
+        pointer.setsize(converted.sizeInBytes())
+        raw = np.frombuffer(pointer, dtype=np.uint8).reshape(height, converted.bytesPerLine())
+        rgb = raw[:, : width * 3].reshape(height, width, 3)
+        return cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2BGR)
+
+    def _auto_annotate(self):
+        if self.canvas.image is None or self.canvas.image.isNull():
+            self.status_message.emit("사진을 먼저 여세요")
+            return
+        from parking.app.pages.monitor import DETECTOR
+        from parking.perception.live import space_polygons
+
+        if DETECTOR.kind != "occupancy":
+            self.status_message.emit("왼쪽에서 주차칸 모델을 선택하세요")
+            return
+        image = self._open_frame_bgr()
+        if image is None:
+            self.status_message.emit("열린 사진을 모델에 넘기지 못했습니다")
+            return
+        self.status_message.emit(f"자동색인 중: {DETECTOR.label}")
+        boxes = DETECTOR.predict_spaces(image)
+        polygons = space_polygons(image, boxes)
+        count = self.canvas.replace_with_polygons(polygons)
+        self.status_message.emit(
+            f"자동색인 {count}개 · 실행 취소로 이전 칸 복구 · {DETECTOR.label}"
+            if count
+            else "모델이 찾은 칸 없음 · 실행 취소로 이전 칸 복구"
+        )
 
     def _apply_folder_polygons(self):
         if not self.current_path:
