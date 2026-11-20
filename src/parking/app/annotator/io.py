@@ -28,23 +28,35 @@ def annot_path(rel: Path) -> Path:
 
 
 def aihub_label_path(rel: str | Path) -> Path | None:
-    """원천데이터/Camera 사진에 대응하는 라벨링데이터/label JSON 경로."""
+    """AI Hub 원천 사진에 대응하는 label JSON 경로."""
     parts = Path(rel).parts
-    try:
-        idx = parts.index("원천데이터")
-    except ValueError:
+    if len(parts) < 3 or parts[-2] != "Camera":
         return None
-    if len(parts) < idx + 3 or parts[-2] != "Camera":
-        return None
-    src_bundle = parts[idx + 1]
-    if src_bundle.startswith("TS"):
-        label_bundle = "TL" + src_bundle[2:]
-    else:
-        label_bundle = src_bundle
     stem = Path(parts[-1]).stem
-    mid = parts[idx + 2 : -2]
-    candidate = DATA_DIR.joinpath(*parts[:idx], "라벨링데이터", label_bundle, *mid, "label", f"{stem}.json")
-    return candidate if candidate.is_file() else None
+
+    # New_Sample: .../원천데이터/TS1_.../.../Camera/x.jpg → .../라벨링데이터/TL1_.../.../label/x.json
+    if "원천데이터" in parts:
+        idx = parts.index("원천데이터")
+        if len(parts) < idx + 3:
+            return None
+        src_bundle = parts[idx + 1]
+        label_bundle = ("TL" + src_bundle[2:]) if src_bundle.startswith("TS") else src_bundle
+        mid = parts[idx + 2 : -2]
+        candidate = DATA_DIR.joinpath(*parts[:idx], "라벨링데이터", label_bundle, *mid, "label", f"{stem}.json")
+        if candidate.is_file():
+            return candidate
+
+    # 실외: .../실외/중소형주차장/중소형주차장_001/Camera/x.jpg → .../실외/라벨링/중소형주차장_001/label/x.json
+    if "실외" in parts:
+        idx = parts.index("실외")
+        # blackbox/실외/<group>/<slot>/Camera/file
+        if len(parts) >= idx + 4 and parts[idx + 1] != "라벨링":
+            slot = parts[-3]
+            candidate = DATA_DIR.joinpath(*parts[: idx + 1], "라벨링", slot, "label", f"{stem}.json")
+            if candidate.is_file():
+                return candidate
+
+    return None
 
 
 def has_annotation(rel: str | Path) -> bool:
