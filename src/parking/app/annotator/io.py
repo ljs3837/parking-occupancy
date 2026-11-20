@@ -318,6 +318,198 @@ def _copy_occupancy(target: list[dict], donor: list[dict]) -> None:
         dst["label"] = src.get("label") or dst.get("label")
 
 
+_PKLOT_POLYGONS: dict[str, list[dict]] | None = None
+_KAGGLE_XML_POLYGONS: dict[str, list[dict]] | None = None
+
+
+def _clip01(value: float) -> float:
+    return min(1.0, max(0.0, value))
+
+
+def _parking_polygon(points: list[list[float]], *, tags: list[str] | None = None) -> dict | None:
+    if len(points) < 3:
+        return None
+    return {
+        "points": points,
+        "tags": list(tags or ["unknown"]),
+        "label": "parking_space",
+    }
+
+
+def _pklot_polygons_index() -> dict[str, list[dict]]:
+    global _PKLOT_POLYGONS
+    if _PKLOT_POLYGONS is not None:
+        return _PKLOT_POLYGONS
+    index: dict[str, list[dict]] = {}
+    path = DATA_DIR / "huggingface" / "hub" / "Voxel51" / "PKLot" / "samples.json"
+    if path.is_file():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        samples = raw["samples"] if isinstance(raw, dict) else raw
+        base = path.parent
+        for sample in samples:
+            filepath = sample.get("filepath") or ""
+            if not filepath:
+                continue
+            try:
+                rel = (base / filepath).relative_to(DATA_DIR).as_posix()
+            except ValueError:
+                continue
+            polygons = [
+                polygon
+                for polygon in polygons_from_annotation(sample)
+                if len(polygon.get("points") or []) >= 3
+            ]
+            if polygons:
+                index[rel] = polygons
+    _PKLOT_POLYGONS = index
+    return index
+
+
+def _kaggle_xml_index() -> dict[str, list[dict]]:
+    global _KAGGLE_XML_POLYGONS
+    if _KAGGLE_XML_POLYGONS is not None:
+        return _KAGGLE_XML_POLYGONS
+    import xml.etree.ElementTree as ET
+
+    index: dict[str, list[dict]] = {}
+    path = DATA_DIR / "kaggle" / "parking-space-detection" / "annotations.xml"
+    if path.is_file():
+        for image in ET.parse(path).getroot().iter("image"):
+            name = Path(image.get("name") or "").name
+            width = float(image.get("width") or 0)
+            height = float(image.get("height") or 0)
+            if not name or width <= 0 or height <= 0:
+                continue
+            polygons = []
+            for polygon in image.findall("polygon"):
+                points = []
+                for pair in (polygon.get("points") or "").split(";"):
+                    if "," not in pair:
+                        continue
+                    x_text, y_text = pair.split(",", 1)
+                    try:
+                        points.append([_clip01(float(x_text) / width), _clip01(float(y_text) / height)])
+                    except ValueError:
+                        continue
+                item = _parking_polygon(points)
+                if item:
+                    polygons.append(item)
+            if polygons:
+                index[name] = polygons
+    _KAGGLE_XML_POLYGONS = index
+    return index
+
+
+def _top_view_polygons(image_path: Path) -> list[dict]:
+    label_path = image_path.with_suffix(".json")
+    if not label_path.is_file():
+        return []
+    from PIL import Image
+
+    raw = json.loads(label_path.read_text(encoding="utf-8"))
+    with Image.open(image_path) as image:
+        width, height = image.size
+    if width <= 0 or height <= 0:
+        return []
+    polygons = []
+    for label in raw.get("labels") or []:
+        try:
+            x1 = _clip01(float(label["x1"]) / width)
+            y1 = _clip01(float(label["y1"]) / height)
+            x2 = _clip01(float(label["x2"]) / width)
+            y2 = _clip01(float(label["y2"]) / height)
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = str(label.get("name") or "").lower()
+        tags = ["occupied"] if "occup" in name else ["empty"] if "free" in name else ["unknown"]
+        item = _parking_polygon([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], tags=tags)
+        if item:
+            polygons.append(item)
+    return polygons
+
+
+def _yolo_seg_polygons(text: str) -> list[dict]:
+    polygons = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 7:
+            continue
+        try:
+            coords = [float(value) for value in parts[1:]]
+        except ValueError:
+            continue
+        if len(coords) < 6 or len(coords) % 2:
+            continue
+        points = [
+            [_clip01(coords[index]), _clip01(coords[index + 1])]
+            for index in range(0, len(coords), 2)
+        ]
+        item = _parking_polygon(points)
+        if item:
+            polygons.append(item)
+    return polygons
+
+
+def _mmu_polygons(rel: str) -> list[dict]:
+    path = Path(rel)
+    label_path = None
+    if path.parent.name == "images" and path.parent.parent.name in {"train", "test"}:
+        label_path = path.parent.parent / "yolo_seg_labels" / f"{path.stem}.txt"
+    elif path.parent.name == "images":
+        for split in ("train", "test"):
+            candidate = (
+                DATA_DIR
+                / "kaggle"
+                / "mmu-parking-slots"
+                / "main_data"
+                / split
+                / "yolo_seg_labels"
+                / f"{path.stem}.txt"
+            )
+            if candidate.is_file():
+                label_path = candidate
+                break
+    if label_path is None:
+        return []
+    file_path = label_path if label_path.is_absolute() else DATA_DIR / label_path
+    if not file_path.is_file():
+        return []
+    return _yolo_seg_polygons(file_path.read_text(encoding="utf-8"))
+
+
+def external_polygons(rel: str) -> list[dict]:
+    """허깅페이스 PKLot와 케글 라벨을 색인 화면용 칸으로 읽는다."""
+    rel = Path(rel).as_posix()
+    if rel.startswith("huggingface/"):
+        return list(_pklot_polygons_index().get(rel) or [])
+    if rel.startswith("kaggle/parking-space-detection/"):
+        return list(_kaggle_xml_index().get(Path(rel).name) or [])
+    if rel.startswith("kaggle/parking-space-top-view/"):
+        return _top_view_polygons(DATA_DIR / rel)
+    if rel.startswith("kaggle/mmu-parking-slots/"):
+        return _mmu_polygons(rel)
+    return []
+
+
+def has_source_annotation(rel: str) -> bool:
+    """우리 색인 또는 허깅페이스·케글 원본 라벨이 있으면 참."""
+    rel_path = Path(rel)
+    if annot_path(rel_path).is_file():
+        return True
+    if shares_folder_annotation(rel) and (ANNOT_DIR / rel_path.with_suffix(".json")).is_file():
+        return True
+    posix = rel_path.as_posix()
+    if posix.startswith("huggingface/"):
+        return posix in _pklot_polygons_index()
+    if posix.startswith("kaggle/parking-space-detection/"):
+        return rel_path.name in _kaggle_xml_index()
+    if posix.startswith("kaggle/parking-space-top-view/"):
+        return (DATA_DIR / rel_path).with_suffix(".json").is_file()
+    if posix.startswith("kaggle/mmu-parking-slots/"):
+        return bool(_mmu_polygons(posix))
+    return False
+
+
 def load_annotation(rel: str) -> list[dict]:
     path = annot_path(Path(rel))
     if path.is_file():

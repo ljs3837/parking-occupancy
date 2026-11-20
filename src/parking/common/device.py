@@ -41,6 +41,53 @@ def yolo_device() -> str:
     return _DEVICE
 
 
+def gpu_file_slug() -> str:
+    """파일 이름에 넣을 그래픽카드 이름. 예: m1-pro, rtx-3060-ti."""
+    device = yolo_device()
+    if device == "cpu":
+        raw = "cpu"
+    elif device == "mps":
+        raw = _apple_chip() or "mps"
+    else:
+        import torch
+
+        raw = torch.cuda.get_device_name(int(device))
+    return _file_slug(raw)
+
+
+def _apple_chip() -> str:
+    import platform
+    import subprocess
+
+    if platform.system() != "Darwin":
+        return ""
+    try:
+        return subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+
+
+def _file_slug(name: str) -> str:
+    skip = {"nvidia", "geforce", "apple", "gpu"}
+    parts: list[str] = []
+    token: list[str] = []
+    for char in name.lower():
+        if char.isalnum():
+            token.append(char)
+            continue
+        if token:
+            parts.append("".join(token))
+            token = []
+    if token:
+        parts.append("".join(token))
+    kept = [part for part in parts if part not in skip]
+    return "-".join(kept) or "gpu"
+
+
 def device_label() -> str:
     device = yolo_device()
     if device == "mps":

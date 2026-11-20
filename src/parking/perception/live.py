@@ -11,7 +11,6 @@ import numpy as np
 
 from parking.app.paths import ROOT
 from parking.common.device import yolo_device
-from parking.perception.lines import refine_spaces
 from parking.perception.tiling import tiled_candidates
 
 MODELS_DIR = ROOT / "models"
@@ -131,8 +130,7 @@ class LiveDetector:
                 boxes.extend(self.predict_space_candidates(
                     frame_bgr, self._space_model, imgsz=size,
                     tiled=bool(self._space_options.get("tiled", False))))
-            return refine_spaces(frame_bgr, boxes, snap_lines=bool(self._space_options.get("snap_lines", True)),
-                                 quad_fit=self._space_options.get("quad_fit", "conservative"))
+            return boxes
 
     def predict_space_candidates(self, frame_bgr, model, *, imgsz=640, tiled=False):
         predict = lambda image: self._yolo_boxes(image, model, "occupancy", imgsz=imgsz)
