@@ -1,0 +1,106 @@
+{
+  "filepath": "blackbox/실외/중소형주차장/중소형주차장_222/Camera/00000033.jpg",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "aihub_bb_4",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.52237,
+              0.621019
+            ],
+            [
+              0.657234,
+              0.621019
+            ],
+            [
+              0.657234,
+              0.638611
+            ],
+            [
+              0.52237,
+              0.638611
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "aihub_bb_5",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.585526,
+              0.625741
+            ],
+            [
+              0.75,
+              0.625741
+            ],
+            [
+              0.75,
+              0.658519
+            ],
+            [
+              0.585526,
+              0.658519
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      },
+      {
+        "_cls": "Polyline",
+        "id": "aihub_bb_6",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.664474,
+              0.632778
+            ],
+            [
+              0.857896,
+              0.632778
+            ],
+            [
+              0.857896,
+              0.673704
+            ],
+            [
+              0.664474,
+              0.673704
+            ]
+          ]
+        ],
+        "index": 3,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 3
+      }
+    ]
+  }
+}
