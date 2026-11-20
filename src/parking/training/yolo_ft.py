@@ -7,11 +7,35 @@ import time
 from pathlib import Path
 
 from parking.common.device import device_label, gpu_file_slug, use_amp, yolo_device
-from parking.training.prepare import MODELS_DIR, build_yolo_dataset, list_data_folders, next_model_path
+from parking.training.prepare import MODELS_DIR, ROOT, build_yolo_dataset, list_data_folders, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
 # 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
 ROTATION_DEGREES = 15.0
+TEST_ROUND_2_AUGMENTATION = {
+    "degrees": 5.0,
+    "perspective": 0.0,
+    "scale": 0.15,
+    "translate": 0.03,
+    "mosaic": 0.0,
+}
+# Ultralytics는 MPS/CPU에서 workers를 0으로 강제한다. 아래에서 콜백으로 다시 올린다.
+DATALOADER_WORKERS = 4
+
+
+def _force_dataloader_workers(model, workers: int, log) -> None:
+    """MPS/CPU에서도 DataLoader 워커를 강제로 살린다. Mac+GUI에서는 불안정할 수 있다."""
+
+    def on_pretrain_routine_start(trainer):
+        if trainer.args.workers == workers:
+            return
+        log(
+            f"[YOLO] Ultralytics가 workers={trainer.args.workers}로 막아서 "
+            f"{workers}로 강제 복구 (불안정하면 0으로 되돌리세요)"
+        )
+        trainer.args.workers = workers
+
+    model.add_callback("on_pretrain_routine_start", on_pretrain_routine_start)
 
 
 def _format_duration(seconds: float) -> str:
@@ -113,40 +137,58 @@ def train_yolo(
     model_name: str = "yolo11s-seg.pt",
     data_yaml: Path | None = None,
     folders: set[str] | None = None,
+    test_round_2: bool = False,
     log=print,
     should_stop=None,
 ) -> Path:
     device = yolo_device()
     amp = use_amp(device)
     log(f"[YOLO] device={device_label()}  amp={amp}")
-    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders)
+    from ultralytics import YOLO
+
+    local_weights = ROOT / model_name
+    model = YOLO(str(local_weights) if local_weights.is_file() else model_name)
+    task = model.task
+    augmentation = {"degrees": ROTATION_DEGREES}
+    if test_round_2:
+        augmentation.update(TEST_ROUND_2_AUGMENTATION)
+    if task == "pose":
+        # Corner identities depend on image orientation.
+        augmentation["fliplr"] = 0.0
+    yaml_path = Path(data_yaml) if data_yaml is not None else build_yolo_dataset(log, folders=folders, task=task)
     log(f"[YOLO] data={yaml_path}")
-    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}  degrees=±{ROTATION_DEGREES:g}")
+    log(f"[YOLO] base={model_name}  epochs={epochs}  batch={batch}")
+    augmentation_text = ", ".join(f"{key}={value:g}" for key, value in augmentation.items())
+    log(f"[YOLO] 증강: {augmentation_text}")
 
     if should_stop and should_stop():
         raise RuntimeError("학습 시작 전 중지됨")
 
-    from ultralytics import YOLO
-
-    dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
+    if task == "pose":
+        stem = Path(model_name).stem.replace("-", "_")
+        base, _, version = stem.rpartition("_")
+        dest = next_model_path(MODELS_DIR / "yolo_corners", base if version.isdigit() else stem)
+    else:
+        dest = next_model_path(OUT_DIR, f"yolo_{gpu_file_slug()}")
     run_name = dest.stem
     log(f"[YOLO] 저장 파일: {dest.name}")
-    model = YOLO(model_name)
     _attach_progress(model, log)
+    _force_dataloader_workers(model, DATALOADER_WORKERS, log)
     results = model.train(
         data=str(yaml_path),
         epochs=epochs,
         batch=batch,
         imgsz=imgsz,
+        resume=False,
         project=str(MODELS_DIR / "_runs"),
         name=run_name,
         exist_ok=False,
         verbose=True,
-        workers=0,
+        workers=DATALOADER_WORKERS,
         device=device,
         amp=amp,
-        degrees=ROTATION_DEGREES,
         patience=max(3, epochs),
+        **augmentation,
     )
 
     best = Path(results.save_dir) / "weights" / "best.pt"
@@ -161,10 +203,14 @@ def train_yolo(
 
     used_folders = sorted(folders) if folders is not None else list_data_folders()
     dest.with_suffix(".txt").write_text(
-        f"YOLO segmentation ({model_name})\n"
-        "labels: polygon parking_space (occupancy ignored)\n"
+        f"YOLO {task} ({model_name})\n"
+        f"labels: "
+        f"{'four keypoints' if task == 'pose' else 'bbox' if task == 'detect' else 'polygon'}"
+        f" parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
+        f"epochs: {epochs}\nbatch: {batch}\nimgsz: {imgsz}\n"
         f"data: {', '.join(used_folders)}\n"
+        f"augmentation: {augmentation_text}\n"
         f"file: {dest.name}\nsource_run: {best}\n",
         encoding="utf-8",
     )

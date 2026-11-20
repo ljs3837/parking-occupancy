@@ -17,18 +17,22 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from parking.training.prepare import list_data_folders
+from parking.training.prepare import MODELS_DIR, list_data_folders
+from parking.training.yolo_ft import TEST_ROUND_2_AUGMENTATION
 
-# 주차칸 폴리곤 파인튜닝에 쓰는 분할 모델. 값은 Ultralytics 가중치 파일명.
+# 주차칸 탐지/분할/꼭짓점 파인튜닝에 쓰는 Ultralytics 가중치.
 YOLO_MODELS = (
+    ("YOLOv8n", "yolov8n.pt"),
     ("YOLOv8n-seg", "yolov8n-seg.pt"),
     ("YOLOv8s-seg", "yolov8s-seg.pt"),
     ("YOLOv8m-seg", "yolov8m-seg.pt"),
     ("YOLOv8l-seg", "yolov8l-seg.pt"),
+    ("YOLO11n", "yolo11n.pt"),
     ("YOLO11n-seg", "yolo11n-seg.pt"),
     ("YOLO11s-seg", "yolo11s-seg.pt"),
     ("YOLO11m-seg", "yolo11m-seg.pt"),
     ("YOLO11l-seg", "yolo11l-seg.pt"),
+    ("YOLO11s-pose", "yolo11s-pose.pt"),
 )
 
 
@@ -37,13 +41,14 @@ class TrainWorker(QThread):
     done = pyqtSignal(str)
     fail = pyqtSignal(str)
 
-    def __init__(self, kind: str, epochs: int, batch: int, model_name: str, folders: list[str]):
+    def __init__(self, kind: str, epochs: int, batch: int, model_name: str, folders: list[str], *, test_round_2: bool = False):
         super().__init__()
         self.kind = kind
         self.epochs = epochs
         self.batch = batch
         self.model_name = model_name
         self.folders = folders
+        self.test_round_2 = test_round_2
         self._stop = False
 
     def request_stop(self):
@@ -64,6 +69,7 @@ class TrainWorker(QThread):
                 batch=self.batch,
                 model_name=self.model_name,
                 folders=set(self.folders),
+                test_round_2=self.test_round_2,
                 log=log,
                 should_stop=self._should_stop,
             )
@@ -97,20 +103,30 @@ class ModelCard(QFrame):
 
         form = QFormLayout()
         self.model = QComboBox()
-        for label, weights in YOLO_MODELS:
-            self.model.addItem(label, weights)
-        self.model.setCurrentIndex(self.model.findData("yolo11s-seg.pt"))
-        self.subtitle.setText(self.model.currentText())
-        self.model.currentIndexChanged.connect(self._sync_subtitle)
+        self.reload_models()
         self.epochs = QSpinBox()
         self.epochs.setRange(1, 200)
         self.epochs.setValue(5)
+        self.epoch_label = QLabel()
         self.batch = QSpinBox()
         self.batch.setRange(1, 128)
         self.batch.setValue(4)
-        form.addRow("YOLO", self.model)
-        form.addRow("epochs", self.epochs)
+        form.addRow("시작 모델", self.model)
+        form.addRow(self.epoch_label, self.epochs)
         form.addRow("batch", self.batch)
+        self.test_preset = QComboBox()
+        self.test_preset.addItem("기존 설정", False)
+        self.test_preset.addItem("2차 테스트", True)
+        self.test_preset.setCurrentIndex(1)
+        form.addRow("테스트", self.test_preset)
+        self.test_values = QLabel(", ".join(
+            f"{name}={value:g}" for name, value in TEST_ROUND_2_AUGMENTATION.items()
+        ))
+        self.test_values.setWordWrap(True)
+        form.addRow(self.test_values)
+        self.test_preset.currentIndexChanged.connect(
+            lambda: self.test_values.setVisible(bool(self.test_preset.currentData()))
+        )
         layout.addLayout(form)
 
         folder_label = QLabel("data 폴더")
@@ -122,12 +138,29 @@ class ModelCard(QFrame):
         self.reload_folders()
 
         self.btn = QPushButton("학습 시작")
+        self.model.currentIndexChanged.connect(self._sync_model)
+        self._sync_model()
         self.btn.clicked.connect(self.start_clicked.emit)
         layout.addWidget(self.btn)
         layout.addStretch(1)
 
-    def _sync_subtitle(self):
+    def reload_models(self) -> None:
+        selected = self.model.currentData() or "yolo11s-seg.pt"
+        self.model.clear()
+        for label, weights in YOLO_MODELS:
+            self.model.addItem(label, weights)
+        for directory in ("yolo_spaces", "yolo_corners"):
+            for weights in sorted((MODELS_DIR / directory).glob("*.pt")):
+                if weights.is_file():
+                    self.model.addItem(f"추가 학습 · {weights.name}", str(weights))
+        index = self.model.findData(selected)
+        self.model.setCurrentIndex(index if index >= 0 else self.model.findData("yolo11s-seg.pt"))
+
+    def _sync_model(self):
+        saved_model = self.model.currentIndex() >= len(YOLO_MODELS)
         self.subtitle.setText(self.model.currentText())
+        self.epoch_label.setText("추가 에폭" if saved_model else "에폭")
+        self.btn.setText("추가 학습 시작" if saved_model else "학습 시작")
 
     def reload_folders(self) -> None:
         previous = {
@@ -157,6 +190,7 @@ class ModelCard(QFrame):
         self.model.setEnabled(not busy)
         self.epochs.setEnabled(not busy)
         self.batch.setEnabled(not busy)
+        self.test_preset.setEnabled(not busy)
         self.folders.setEnabled(not busy)
 
 
@@ -203,6 +237,11 @@ class TrainPage(QWidget):
         self.log.setMinimumHeight(220)
         root.addWidget(self.log, 1)
 
+    def showEvent(self, event):
+        if self.worker is None or not self.worker.isRunning():
+            self.yolo_card.reload_models()
+        super().showEvent(event)
+
     def _append(self, msg: str):
         self.log.append(msg)
         self.status_message.emit(msg[:80])
@@ -224,7 +263,10 @@ class TrainPage(QWidget):
         self._append(
             f"=== YOLO 학습 시작 ({model_name}, epochs={epochs}, batch={batch}, folders={', '.join(folders)}) ==="
         )
-        self.worker = TrainWorker("yolo", epochs, batch, model_name, folders)
+        self.worker = TrainWorker(
+            "yolo", epochs, batch, model_name, folders,
+            test_round_2=bool(self.yolo_card.test_preset.currentData()),
+        )
         self.worker.log.connect(self._append)
         self.worker.done.connect(self._on_done)
         self.worker.fail.connect(self._on_fail)
@@ -237,6 +279,7 @@ class TrainPage(QWidget):
             self._append("[UI] 중지 요청… (현재 epoch/배치 끝난 뒤 반영)")
 
     def _on_done(self, path: str):
+        self.yolo_card.reload_models()
         self._set_busy(False)
         self._append(f"=== 완료: {path} ===")
         QMessageBox.information(self, "학습 완료", f"가중치 저장:\n{path}")
