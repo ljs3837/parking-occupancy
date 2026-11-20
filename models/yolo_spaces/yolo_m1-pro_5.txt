@@ -1,0 +1,12 @@
+YOLO segment (yolo11n-seg.pt)
+labels: polygon parking_space (occupancy ignored)
+device: Apple GPU (MPS)
+planned_epochs: 20
+kept_epochs: 4
+batch: 16
+imgsz: 640
+data: outputs/train/yolo_parking (cctv, cctv_image, huggingface, kaggle)
+val@epoch4: mAP50(B)=0.976 mAP50-95(B)=0.767 mAP50(M)=0.959 mAP50-95(M)=0.634
+note: 20에포크 학습 중 5에포크 진행 시점에서 중지. 4에포크 완료 best 가중치.
+file: yolo_m1-pro_5.pt
+source_run: models/_runs/yolo_m1-pro_5/weights/best.pt
