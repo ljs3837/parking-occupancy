@@ -494,7 +494,14 @@ class Canvas(QWidget):
                 sum(pt.y() for pt in screen_pts) / len(screen_pts),
             )
             painter.setPen(QColor("#e7eef7"))
-            painter.drawText(c, "가림" if is_occlusion else occ[:8])
+            source = (p.get("source_name") or "").strip()
+            if is_occlusion:
+                text = "가림"
+            elif source:
+                text = source[:14]
+            else:
+                text = occ[:8]
+            painter.drawText(c, text)
 
         if self.draft:
             painter.setPen(QPen(QColor("#f4a261"), 2, Qt.PenStyle.DashLine))

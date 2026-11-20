@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS, VIDEO_EXTS
+
+# AI Hub 블랙박스 라벨 → 색인 표시용
+_AIHUB_PARKING_SEG = {"Parking Space"}
+_AIHUB_PARKING_BBOX = {"Electric Car Parking Space", "Disabled Parking Space"}
+_AIHUB_VEHICLE = {"Car", "Van", "Other Vehicle", "Motorbike"}
 
 
 def shares_folder_annotation(rel: str) -> bool:
@@ -19,6 +25,122 @@ def annot_path(rel: Path) -> Path:
     if shares_folder_annotation(rel.as_posix()):
         return ANNOT_DIR / rel.parent / "_layout.json"
     return ANNOT_DIR / rel.with_suffix(".json")
+
+
+def aihub_label_path(rel: str | Path) -> Path | None:
+    """원천데이터/Camera 사진에 대응하는 라벨링데이터/label JSON 경로."""
+    parts = Path(rel).parts
+    try:
+        idx = parts.index("원천데이터")
+    except ValueError:
+        return None
+    if len(parts) < idx + 3 or parts[-2] != "Camera":
+        return None
+    src_bundle = parts[idx + 1]
+    if src_bundle.startswith("TS"):
+        label_bundle = "TL" + src_bundle[2:]
+    else:
+        label_bundle = src_bundle
+    stem = Path(parts[-1]).stem
+    mid = parts[idx + 2 : -2]
+    candidate = DATA_DIR.joinpath(*parts[:idx], "라벨링데이터", label_bundle, *mid, "label", f"{stem}.json")
+    return candidate if candidate.is_file() else None
+
+
+def has_annotation(rel: str | Path) -> bool:
+    """우리 색인 JSON 또는 AI Hub 원본 라벨이 있으면 True."""
+    rel_s = Path(rel).as_posix()
+    if annot_path(Path(rel_s)).is_file():
+        return True
+    if shares_folder_annotation(rel_s):
+        legacy = ANNOT_DIR / Path(rel_s).with_suffix(".json")
+        if legacy.is_file():
+            return True
+    return aihub_label_path(rel_s) is not None
+
+
+@lru_cache(maxsize=256)
+def _image_wh(path_str: str) -> tuple[int, int]:
+    path = Path(path_str)
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            return int(image.size[0]), int(image.size[1])
+    except Exception:
+        return 1920, 1080
+
+
+def _norm_xy(x: float, y: float, width: float, height: float) -> list[float]:
+    if width <= 0 or height <= 0:
+        return [0.0, 0.0]
+    return [
+        min(1.0, max(0.0, float(x) / width)),
+        min(1.0, max(0.0, float(y) / height)),
+    ]
+
+
+def _bbox_quad(bbox: list[float], width: float, height: float) -> list[list[float]]:
+    if len(bbox) < 4:
+        return []
+    x1, y1, x2, y2 = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    return [
+        _norm_xy(x1, y1, width, height),
+        _norm_xy(x2, y1, width, height),
+        _norm_xy(x2, y2, width, height),
+        _norm_xy(x1, y2, width, height),
+    ]
+
+
+def polygons_from_aihub(data: dict, width: int, height: int) -> list[dict]:
+    """AI Hub bbox2d/segmentation → 색인 폴리곤."""
+    polygons: list[dict] = []
+    index = 0
+
+    for item in data.get("segmentation") or []:
+        name = (item.get("name") or "").strip()
+        if name not in _AIHUB_PARKING_SEG:
+            continue
+        raw = item.get("polygon") or []
+        points = [_norm_xy(pt[0], pt[1], width, height) for pt in raw if isinstance(pt, (list, tuple)) and len(pt) >= 2]
+        if len(points) < 3:
+            continue
+        index += 1
+        polygons.append(
+            {
+                "id": f"aihub_ps_{index}",
+                "points": points,
+                "tags": ["empty"],
+                "label": "parking_space",
+                "source_name": name,
+            }
+        )
+
+    for item in data.get("bbox2d") or []:
+        name = (item.get("name") or "").strip()
+        bbox = item.get("bbox") or []
+        points = _bbox_quad(bbox, width, height)
+        if len(points) < 4:
+            continue
+        index += 1
+        if name in _AIHUB_PARKING_BBOX:
+            tags = ["empty"]
+            label = "parking_space"
+        elif name in _AIHUB_VEHICLE:
+            tags = ["occupied"]
+            label = "parking_space"
+        else:
+            continue
+        polygons.append(
+            {
+                "id": f"aihub_bb_{index}",
+                "points": points,
+                "tags": tags,
+                "label": label,
+                "source_name": name,
+            }
+        )
+    return polygons
 
 
 def list_images() -> list[str]:
@@ -204,6 +326,12 @@ def load_annotation(rel: str) -> list[dict]:
         legacy = ANNOT_DIR / Path(rel).with_suffix(".json")
         if legacy.is_file() and legacy != path:
             return _polygons_from_file(legacy)
+    aihub = aihub_label_path(rel)
+    if aihub is not None:
+        image = DATA_DIR / Path(rel)
+        width, height = _image_wh(str(image.resolve())) if image.is_file() else (1920, 1080)
+        data = json.loads(aihub.read_text(encoding="utf-8"))
+        return polygons_from_aihub(data, width, height)
     return []
 
 

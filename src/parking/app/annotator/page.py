@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    _shares_polygons, annot_path, apply_folder_annotations, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
+    _shares_polygons, annot_path, apply_folder_annotations, has_annotation, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -26,7 +26,7 @@ class _AnnotatedFsModel(QFileSystemModel):
                     rel = path.resolve().relative_to(DATA_DIR.resolve())
                 except (OSError, ValueError):
                     rel = None
-                if rel is not None and annot_path(rel).exists():
+                if rel is not None and has_annotation(rel.as_posix()):
                     return QColor("#2ec4b6")
         return super().data(index, role)
 
@@ -155,8 +155,9 @@ class AnnotatorPage(QWidget):
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
         hint = QLabel(
-            "같은 폴더 사진은 색인 JSON 하나를 공유 · E 로 상태 전환 · "
-            "주차칸은 꼭짓점 4개 클릭 시 자동 확정 · "
+            "같은 폴더 사진은 색인 JSON 하나를 공유 · "
+            "New_Sample 원천사진은 AI Hub 라벨을 자동 표시 · "
+            "E 로 상태 전환 · 주차칸은 꼭짓점 4개 클릭 시 자동 확정 · "
             "그리기 중 Ctrl을 누르면 가까운 꼭짓점에 붙음 · "
             "Backspace: 마지막 점 취소 · Esc: 전체 취소"
         )
@@ -490,7 +491,9 @@ class AnnotatorPage(QWidget):
             state = "occlusion" if polygon.get("label") == "occlusion" or "occlusion" in polygon.get("tags", []) else occupancy_of(polygon["tags"])
             state_name = {"empty": "차 없음", "occupied": "차 있음", "unknown": "미정", "occlusion": "가림"}.get(state, state)
             counts[state] += 1
-            item = QListWidgetItem(f"#{index + 1}  {state_name}  ({len(polygon['points'])}개 꼭짓점)")
+            source = polygon.get("source_name")
+            title = f"{state_name}/{source}" if source else state_name
+            item = QListWidgetItem(f"#{index + 1}  {title}  ({len(polygon['points'])}개 꼭짓점)")
             item.setData(Qt.ItemDataRole.UserRole, polygon["id"])
             self.poly_list.addItem(item)
             if polygon["id"] in self.canvas.selected_ids or polygon["id"] == self.canvas.selected_id:
