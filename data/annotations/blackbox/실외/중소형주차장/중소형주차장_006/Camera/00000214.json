@@ -1,0 +1,78 @@
+{
+  "filepath": "blackbox/실외/중소형주차장/중소형주차장_006/Camera/00000214.jpg",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "aihub_ps_1",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.532453,
+              0.748509
+            ],
+            [
+              0.464995,
+              0.870343
+            ],
+            [
+              0.690396,
+              0.890333
+            ],
+            [
+              0.800151,
+              0.904611
+            ],
+            [
+              0.704849,
+              0.752315
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_fdf15852",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.5121124031007752,
+              0.739018087855297
+            ],
+            [
+              0.44509043927648584,
+              0.8725236864771748
+            ],
+            [
+              0.15923772609819126,
+              0.8438128050531151
+            ],
+            [
+              0.3053940568475452,
+              0.7189204708584553
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      }
+    ]
+  }
+}

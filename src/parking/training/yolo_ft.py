@@ -179,6 +179,7 @@ def train_yolo(
         epochs=epochs,
         batch=batch,
         imgsz=imgsz,
+        resume=False,
         project=str(MODELS_DIR / "_runs"),
         name=run_name,
         exist_ok=False,
@@ -207,6 +208,7 @@ def train_yolo(
         f"{'four keypoints' if task == 'pose' else 'bbox' if task == 'detect' else 'polygon'}"
         f" parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
+        f"epochs: {epochs}\nbatch: {batch}\nimgsz: {imgsz}\n"
         f"data: {', '.join(used_folders)}\n"
         f"augmentation: {augmentation_text}\n"
         f"file: {dest.name}\nsource_run: {best}\n",

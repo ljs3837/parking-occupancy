@@ -86,7 +86,7 @@ class LiveDetector:
         self.label = "YOLOv8n 차량만"
         self._lock = threading.Lock()
         # 관제 UI에서 고른 추론 옵션. 모델 옆 JSON이 아니라 여기가 기준이다.
-        self._inference = {"tiled": False, "inference_imgsz": 640}
+        self._inference = {"inference_imgsz": 640}
 
     def use(self, kind: str, path: str, label: str):
         with self._lock:
@@ -97,11 +97,9 @@ class LiveDetector:
             self._vehicle_model = None
             self._ready = False
 
-    def set_inference(self, *, tiled: bool | None = None, imgsz: int | None = None) -> None:
-        """관제 사이드바에서 타일/입력 크기를 바로 반영한다."""
+    def set_inference(self, *, imgsz: int | None = None) -> None:
+        """관제 사이드바에서 입력 크기를 바로 반영한다."""
         with self._lock:
-            if tiled is not None:
-                self._inference["tiled"] = bool(tiled)
             if imgsz is not None:
                 size = int(imgsz)
                 self._inference["inference_imgsz"] = size if size in (640, 960, 1280) else 640
@@ -133,10 +131,21 @@ class LiveDetector:
                 size = int(self._inference.get("inference_imgsz", 640))
                 if size not in (640, 960, 1280):
                     size = 640
-                boxes.extend(self.predict_space_candidates(
-                    frame_bgr, self._space_model, imgsz=size,
-                    tiled=bool(self._inference.get("tiled", False))))
+                boxes.extend(self._yolo_boxes(frame_bgr, self._space_model, "occupancy", imgsz=size))
             return boxes
+
+    def predict_spaces(self, frame_bgr: np.ndarray) -> list[dict]:
+        """선택된 주차칸 모델만 추론한다. 차량 모델은 돌리지 않는다."""
+        with self._lock:
+            if self.kind != "occupancy":
+                return []
+            self.ensure()
+            if self._space_model is None:
+                return []
+            size = int(self._inference.get("inference_imgsz", 640))
+            if size not in (640, 960, 1280):
+                size = 640
+            return self._yolo_boxes(frame_bgr, self._space_model, "occupancy", imgsz=size)
 
     def predict_space_candidates(self, frame_bgr, model, *, imgsz=640, tiled=False):
         predict = lambda image: self._yolo_boxes(image, model, "occupancy", imgsz=imgsz)
@@ -207,6 +216,51 @@ def draw_detections(frame_bgr: np.ndarray, boxes: list[dict]) -> np.ndarray:
         text = f"{_display_label(label)} {box['conf']:.2f}"
         cv2.putText(canvas, text, (x1, max(16, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
     return canvas
+
+
+def space_polygons(frame_bgr: np.ndarray, boxes: list[dict]) -> list[dict]:
+    """주차칸 마스크를 0~1 폴리곤으로 단순화한다. 꼭짓점은 3개 이상이면 된다."""
+    height, width = frame_bgr.shape[:2]
+    if width <= 0 or height <= 0:
+        return []
+    polygons = []
+    for box in boxes:
+        if box.get("label") not in SPACE_LABELS:
+            continue
+        raw = box.get("points")
+        if not raw or len(raw) < 3:
+            x1, y1, x2, y2 = box["xyxy"]
+            raw = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+        contour = np.asarray(raw, dtype=np.float32).reshape(-1, 1, 2)
+        if len(contour) > 8:
+            perimeter = cv2.arcLength(contour, True)
+            simplified = cv2.approxPolyDP(contour, max(1.5, 0.012 * perimeter), True)
+            if len(simplified) >= 3:
+                contour = simplified
+        points = []
+        for x, y in contour.reshape(-1, 2):
+            points.append([
+                min(1.0, max(0.0, float(x) / width)),
+                min(1.0, max(0.0, float(y) / height)),
+            ])
+        if len(points) < 3:
+            continue
+        label = str(box.get("label") or "parking_space")
+        if label in {"empty", "vacant", "not occupied"}:
+            tags = ["empty"]
+        elif label == "occupied":
+            tags = ["occupied"]
+        else:
+            tags = ["unknown"]
+        polygons.append(
+            {
+                "points": points,
+                "tags": tags,
+                "label": "parking_space",
+                "source_name": "model",
+            }
+        )
+    return polygons
 
 
 def summarize(boxes: list[dict]) -> str:

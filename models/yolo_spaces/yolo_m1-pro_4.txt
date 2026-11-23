@@ -1,0 +1,6 @@
+YOLO detect (yolov8n.pt)
+labels: bbox parking_space (occupancy ignored)
+device: Apple GPU (MPS)
+file: yolo_m1-pro_4.pt
+source_run: /Users/taesoo/Projects/teamProject/parking-occupancy/models/_runs/yolo_m1-pro_4/weights/best.pt
+note: resumed after crash at epoch 4/5

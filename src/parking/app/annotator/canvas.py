@@ -222,6 +222,32 @@ class Canvas(QWidget):
         self.update()
         return True
 
+    def replace_with_polygons(self, polygons: list[dict]) -> int:
+        """기존 칸을 지우고 새 칸만 남긴다. 실행 취소로 이전 칸을 되돌린다."""
+        added = []
+        for polygon in polygons:
+            points = [QPointF(float(x), float(y)) for x, y in polygon.get("points") or []]
+            if len(points) < 3:
+                continue
+            added.append(
+                {
+                    "id": polygon.get("id") or f"p_{uuid.uuid4().hex[:8]}",
+                    "points": points,
+                    "tags": list(polygon.get("tags") or ["unknown"]),
+                    "label": polygon.get("label") or "parking_space",
+                    "source_name": polygon.get("source_name"),
+                }
+            )
+        self._record_undo()
+        self.polygons = added
+        self.selected_id = added[-1]["id"] if added else None
+        self.selected_ids = {item["id"] for item in added}
+        self.draft.clear()
+        self.mark_dirty()
+        self.selection_changed.emit()
+        self.update()
+        return len(added)
+
     def undo_last_draft_point(self) -> bool:
         if not self.draft:
             return False
@@ -494,7 +520,14 @@ class Canvas(QWidget):
                 sum(pt.y() for pt in screen_pts) / len(screen_pts),
             )
             painter.setPen(QColor("#e7eef7"))
-            painter.drawText(c, "가림" if is_occlusion else occ[:8])
+            source = (p.get("source_name") or "").strip()
+            if is_occlusion:
+                text = "가림"
+            elif source:
+                text = source[:14]
+            else:
+                text = occ[:8]
+            painter.drawText(c, text)
 
         if self.draft:
             painter.setPen(QPen(QColor("#f4a261"), 2, Qt.PenStyle.DashLine))
