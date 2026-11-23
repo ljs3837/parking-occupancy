@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
+from uuid import uuid4
 
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS, VIDEO_EXTS
 
@@ -18,6 +19,13 @@ def shares_folder_annotation(rel: str) -> bool:
     if len(parts) >= 3 and parts[0] == "cctv_image":
         return True
     return len(parts) >= 2 and parts[0].startswith("camera") and parts[0][len("camera"):].isdigit()
+
+
+def supports_folder_apply(rel: str) -> bool:
+    parts = Path(rel).parts
+    return shares_folder_annotation(rel) or (
+        len(parts) >= 3 and parts[0] == "blackbox" and parts[-2] == "Camera"
+    )
 
 
 def annot_path(rel: Path) -> Path:
@@ -553,7 +561,7 @@ def has_source_annotation(rel: str) -> bool:
     return any(path.is_file() for path in placed_annotation_paths(posix))
 
 
-def _convert_placed_aihub(rel: str) -> list[dict] | None:
+def _convert_placed_aihub(rel: str, *, persist: bool) -> list[dict] | None:
     """annotations에 넣어 둔 AI Hub JSON을 사진과 같은 경로의 색인 형식으로 바꾼다."""
     source = None
     data = None
@@ -572,8 +580,8 @@ def _convert_placed_aihub(rel: str) -> list[dict] | None:
     image = DATA_DIR / Path(rel)
     width, height = _image_wh(str(image.resolve())) if image.is_file() else (1920, 1080)
     polygons = _round_polygons(polygons_from_aihub(data, width, height))
-    if not polygons:
-        return []
+    if not persist or not polygons:
+        return polygons
     saved = save_annotation(rel, polygons)
     if source.resolve() != saved.resolve():
         try:
@@ -583,8 +591,8 @@ def _convert_placed_aihub(rel: str) -> list[dict] | None:
     return polygons
 
 
-def load_annotation(rel: str) -> list[dict]:
-    converted = _convert_placed_aihub(rel)
+def load_annotation(rel: str, *, persist_conversion: bool = True) -> list[dict]:
+    converted = _convert_placed_aihub(rel, persist=persist_conversion)
     if converted is not None:
         return converted
     path = annot_path(Path(rel))
@@ -604,27 +612,58 @@ def polygons_from_folder_layout(rel: str, current: list[dict] | None = None) -> 
     return load_annotation(rel)
 
 
-def _shares_polygons(rel: str) -> bool:
-    return shares_folder_annotation(rel)
-
-
 def _legacy_jsons(folder: Path) -> list[Path]:
     return sorted(path for path in folder.glob("*.json") if not path.name.startswith("_"))
 
 
 def apply_folder_annotations(rel: str, polygons: list[dict]) -> list[str]:
-    """같은 폴더 사진이 공유하는 색인 파일 하나에 칸을 저장한다."""
-    if not shares_folder_annotation(rel) or not polygons:
+    """현재 주차칸을 같은 폴더에 적용하고 사진별 점유 상태를 유지한다."""
+    rel = Path(rel).as_posix()
+    if not supports_folder_apply(rel) or not polygons:
         return []
-    save_annotation(rel, polygons)
     folder = DATA_DIR / Path(rel).parent
-    if not folder.is_dir():
-        return [rel]
-    return [
+    images = [
         path.relative_to(DATA_DIR).as_posix()
         for path in sorted(folder.iterdir())
         if path.is_file() and path.suffix.lower() in IMAGE_EXTS
     ]
+    if rel not in images:
+        return []
+    if shares_folder_annotation(rel):
+        save_annotation(rel, polygons)
+        return images
+
+    spaces = [polygon for polygon in polygons if _occupancy_status(polygon)[0] == "parking_space"]
+    if not spaces:
+        return []
+    space_geometries = [(polygon, _geom_key([polygon])) for polygon in spaces]
+    space_ids = {polygon.get("id") for polygon in spaces}
+    updates = {rel: polygons}
+    for image in images:
+        if image == rel:
+            continue
+        try:
+            previous = load_annotation(image, persist_conversion=False)
+        except ValueError as exc:
+            raise ValueError(f"{image}: {exc}") from exc
+        statuses = {}
+        occlusions = []
+        for polygon in previous:
+            label, _ = _occupancy_status(polygon)
+            if label == "occlusion":
+                if polygon.get("id") in space_ids:
+                    polygon = {**polygon, "id": f"p_{uuid4().hex[:8]}"}
+                occlusions.append(polygon)
+            elif label == "parking_space":
+                statuses[_geom_key([polygon])] = polygon.get("tags") or ["unknown"]
+        updates[image] = [
+            {**polygon, "tags": statuses.get(geometry, ["unknown"])}
+            for polygon, geometry in space_geometries
+        ] + occlusions
+
+    for image, updated in updates.items():
+        save_annotation(image, updated)
+    return images
 
 
 def save_annotation(rel: str, polygons: list[dict], *, update_layout: bool = True) -> Path:

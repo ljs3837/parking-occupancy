@@ -4,39 +4,6 @@
   "_media_type": "image",
   "parking_spaces": {
     "_cls": "Polylines",
-    "polylines": [
-      {
-        "_cls": "Polyline",
-        "id": "p_28b57ad9",
-        "attributes": {},
-        "tags": [],
-        "label": "parking_space",
-        "points": [
-          [
-            [
-              0.492003582395087,
-              0.9890253610826791
-            ],
-            [
-              0.4770769361992494,
-              0.7881079646688653
-            ],
-            [
-              0.8299854998294097,
-              0.7501990219492778
-            ],
-            [
-              0.907817297850563,
-              0.9852344668107206
-            ]
-          ]
-        ],
-        "index": 1,
-        "closed": true,
-        "filled": true,
-        "occupancy_status": "not occupied",
-        "space_id": 1
-      }
-    ]
+    "polylines": []
   }
 }
