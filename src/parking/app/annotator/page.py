@@ -12,7 +12,16 @@ from PyQt6.QtWidgets import (
 
 from parking.app.annotator.canvas import Canvas
 from parking.app.annotator.io import (
-    _shares_polygons, annot_path, annotation_needs_aihub_convert, apply_folder_annotations, has_source_annotation, load_annotation, occupancy_of, polygons_from_folder_layout, save_annotation, shares_folder_annotation,
+    annot_path,
+    annotation_needs_aihub_convert,
+    apply_folder_annotations,
+    has_source_annotation,
+    load_annotation,
+    occupancy_of,
+    polygons_from_folder_layout,
+    save_annotation,
+    shares_folder_annotation,
+    supports_folder_apply,
 )
 from parking.app.paths import ANNOT_DIR, DATA_DIR, IMAGE_EXTS
 
@@ -177,7 +186,7 @@ class AnnotatorPage(QWidget):
         self.poly_list.itemSelectionChanged.connect(self._on_poly_selection)
         side_layout.addWidget(self.poly_list)
         hint = QLabel(
-            "같은 폴더 사진은 색인 JSON 하나를 공유 · "
+            "블랙박스 Camera 폴더는 사진별로 색인을 저장 · "
             "annotations의 AI Hub JSON은 사진을 열면 색인 형식으로 바뀜 · "
             "E 로 상태 전환 · 주차칸은 꼭짓점 4개 클릭 시 자동 확정 · "
             "Space: 꼭짓점 3개 이상에서 수동 확정 · "
@@ -558,8 +567,8 @@ class AnnotatorPage(QWidget):
         if not self.current_path:
             self.status_message.emit("사진을 먼저 여세요")
             return
-        if not _shares_polygons(self.current_path):
-            self.status_message.emit("cctv_image 또는 camera숫자 폴더에서만 적용됩니다")
+        if not supports_folder_apply(self.current_path):
+            self.status_message.emit("cctv_image, camera숫자, 블랙박스 Camera 폴더에서 적용할 수 있습니다")
             return
         polygons = self.canvas.export_polygons()
         if not polygons:
@@ -567,19 +576,22 @@ class AnnotatorPage(QWidget):
         if not polygons:
             self.status_message.emit("이 폴더에 적용할 칸이 없습니다. 한 장에서 칸을 먼저 그리세요")
             return
-        self._autosave_timer.stop()
         try:
             applied = apply_folder_annotations(self.current_path, polygons)
         except (OSError, ValueError) as exc:
             self.status_message.emit(f"폴더 칸 적용 실패: {exc}")
             return
+        if not applied:
+            self.status_message.emit("폴더에 적용할 주차칸이 있는 사진을 여세요")
+            return
         self.canvas.replace_polygons(polygons)
         self.canvas._dirty = False
+        self._autosave_timer.stop()
         for rel in applied:
             index = self.fs_model.index(str((DATA_DIR / rel).resolve()))
             if index.isValid():
                 self.fs_model.dataChanged.emit(index, index, [Qt.ItemDataRole.ForegroundRole])
-        self.status_message.emit(f"사진 {len(applied)}장에 폴더 칸 {len(polygons)}개 적용 · 새 칸은 차 없음")
+        self.status_message.emit(f"사진 {len(applied)}장에 폴더 칸 적용")
 
     def save_current(self):
         if not self.current_path:

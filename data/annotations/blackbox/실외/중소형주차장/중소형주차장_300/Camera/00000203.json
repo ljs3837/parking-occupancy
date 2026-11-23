@@ -4,63 +4,6 @@
   "_media_type": "image",
   "parking_spaces": {
     "_cls": "Polylines",
-    "polylines": [
-      {
-        "_cls": "Polyline",
-        "id": "aihub_ps_1",
-        "attributes": {},
-        "tags": [],
-        "label": "parking_space",
-        "points": [
-          [
-            [
-              1.0,
-              0.699352
-            ],
-            [
-              1.0,
-              0.91538
-            ],
-            [
-              0.999604,
-              0.999954
-            ],
-            [
-              1.0,
-              1.0
-            ],
-            [
-              0.980328,
-              1.0
-            ],
-            [
-              0.971651,
-              0.963111
-            ],
-            [
-              0.957672,
-              0.89713
-            ],
-            [
-              0.934052,
-              0.815722
-            ],
-            [
-              0.908026,
-              0.732694
-            ],
-            [
-              0.938271,
-              0.722065
-            ]
-          ]
-        ],
-        "index": 1,
-        "closed": true,
-        "filled": true,
-        "occupancy_status": "not occupied",
-        "space_id": 1
-      }
-    ]
+    "polylines": []
   }
 }
