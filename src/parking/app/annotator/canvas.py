@@ -660,7 +660,15 @@ class Canvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.draft.append(self.clamp01(n))
             self._snap_norm = snap
-            self.update()
+            if (
+                self.mode == "draw"
+                and len(self.draft) == 4
+                and self.draw_label != "occlusion"
+                and self.draw_status != "occlusion"
+            ):
+                self.close_draft()
+            else:
+                self.update()
 
     def mouseMoveEvent(self, event):
         if self._warping:
