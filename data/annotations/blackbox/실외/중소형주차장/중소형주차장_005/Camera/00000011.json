@@ -7,18 +7,13 @@
     "polylines": [
       {
         "_cls": "Polyline",
-<<<<<<<< HEAD:data/annotations/blackbox/실외/중소형주차장/중소형주차장_005/Camera/00000011.json
         "id": "aihub_ps_1",
-========
-        "id": "p_eadcc141",
->>>>>>>> 4b91225edb1755dd190961831daafaf188f7026e:data/annotations/blackbox/실외/중소형주차장/중소형주차장_001/Camera/00000004.json
         "attributes": {},
         "tags": [],
         "label": "parking_space",
         "points": [
           [
             [
-<<<<<<<< HEAD:data/annotations/blackbox/실외/중소형주차장/중소형주차장_005/Camera/00000011.json
               0.0,
               0.747685
             ],
@@ -33,22 +28,6 @@
             [
               0.0,
               0.887815
-========
-              0.24212991684106988,
-              0.6845858873352577
-            ],
-            [
-              0.1071649021746168,
-              0.7511808696287274
-            ],
-            [
-              0.3220071704191747,
-              0.7492221936789195
-            ],
-            [
-              0.3677300121225037,
-              0.6816478734105458
->>>>>>>> 4b91225edb1755dd190961831daafaf188f7026e:data/annotations/blackbox/실외/중소형주차장/중소형주차장_001/Camera/00000004.json
             ]
           ]
         ],

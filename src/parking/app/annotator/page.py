@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PyQt6.QtCore import QDir, QSortFilterProxyModel, Qt, QTimer, pyqtSignal
@@ -511,7 +512,12 @@ class AnnotatorPage(QWidget):
         if not self.confirm_leave():
             return
         needs_convert = annotation_needs_aihub_convert(rel)
-        self.canvas.load_image(DATA_DIR / rel, load_annotation(rel))
+        try:
+            polygons = load_annotation(rel)
+        except json.JSONDecodeError:
+            self.status_message.emit(f"색인 JSON이 깨져 있습니다: {rel}")
+            return
+        self.canvas.load_image(DATA_DIR / rel, polygons)
         self.current_path = rel
         if needs_convert:
             self.status_message.emit(f"AI Hub 색인을 사용 형식으로 변환함: {rel}")
