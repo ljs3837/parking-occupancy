@@ -4,6 +4,71 @@
   "_media_type": "image",
   "parking_spaces": {
     "_cls": "Polylines",
-    "polylines": []
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "p_344ebba8",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.21326125418358988,
+              0.6551009393587297
+            ],
+            [
+              0.14095856775513288,
+              0.6988213846669425
+            ],
+            [
+              0.29097434571893815,
+              0.6927005223237928
+            ],
+            [
+              0.31999379129226446,
+              0.6577241660772225
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_450b2592",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.0004411123004109471,
+              0.6961256623120968
+            ],
+            [
+              0.13963796214868504,
+              0.6975198091650373
+            ],
+            [
+              0.21326125418358988,
+              0.6551009393587297
+            ],
+            [
+              0.06356982448512116,
+              0.6556954035768234
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      }
+    ]
   }
 }
