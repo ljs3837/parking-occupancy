@@ -1,0 +1,234 @@
+{
+  "filepath": "blackbox/실외/중소형주차장/중소형주차장_222/Camera/00000086.jpg",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "p_5ee344b9",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.44232979924035093,
+              0.6375108366761272
+            ],
+            [
+              0.4350453519982062,
+              0.646929111898294
+            ],
+            [
+              0.23836527646029962,
+              0.6398654054816688
+            ],
+            [
+              0.25889417323361646,
+              0.6310357724608875
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_7ddce0e3",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.23836527646029962,
+              0.6398654054816688
+            ],
+            [
+              0.20889637625344154,
+              0.651049607307992
+            ],
+            [
+              0.4231253474201513,
+              0.6598792403287735
+            ],
+            [
+              0.4350453519982062,
+              0.646929111898294
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_87c82346",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.4231253474201513,
+              0.6598792403287735
+            ],
+            [
+              0.4105431203655377,
+              0.6745952953634092
+            ],
+            [
+              0.15128302079284267,
+              0.663411093537086
+            ],
+            [
+              0.20889637625344154,
+              0.651049607307992
+            ]
+          ]
+        ],
+        "index": 3,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 3
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_67b0ec64",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.15128302079284267,
+              0.663411093537086
+            ],
+            [
+              0.0824118832307474,
+              0.6810703595786489
+            ],
+            [
+              0.39464978092813113,
+              0.693431845807743
+            ],
+            [
+              0.4105431203655377,
+              0.6745952953634092
+            ]
+          ]
+        ],
+        "index": 4,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 4
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_dd4d5176",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.39464978092813113,
+              0.693431845807743
+            ],
+            [
+              0.36418754700643513,
+              0.7293390200922542
+            ],
+            [
+              0.0012896298523179042,
+              0.709913827446535
+            ],
+            [
+              0.0824118832307474,
+              0.6810703595786489
+            ]
+          ]
+        ],
+        "index": 5,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 5
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_f490f304",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.36418754700643513,
+              0.7293390200922542
+            ],
+            [
+              0.316909944906796,
+              0.7839219774381888
+            ],
+            [
+              0.0024423637114795037,
+              0.7708931887634299
+            ],
+            [
+              0.0012896298523179042,
+              0.709913827446535
+            ]
+          ]
+        ],
+        "index": 6,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 6
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_ac48df82",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.316909944906796,
+              0.7839219774381888
+            ],
+            [
+              0.22363566234886317,
+              0.8905211575043979
+            ],
+            [
+              0.0024423637114795037,
+              0.8869678515021908
+            ],
+            [
+              0.0024423637114795037,
+              0.7708931887634299
+            ]
+          ]
+        ],
+        "index": 7,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 7
+      }
+    ]
+  }
+}
