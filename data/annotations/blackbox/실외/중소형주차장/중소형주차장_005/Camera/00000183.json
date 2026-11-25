@@ -1,9 +1,0 @@
-{
-  "filepath": "blackbox/실외/중소형주차장/중소형주차장_005/Camera/00000183.jpg",
-  "tags": [],
-  "_media_type": "image",
-  "parking_spaces": {
-    "_cls": "Polylines",
-    "polylines": []
-  }
-}
