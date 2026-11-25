@@ -16,7 +16,7 @@ def occlude_slots(image, polygons, seed=42):
     changed = 0
     for polygon in polygons:
         points = np.asarray(polygon["points"], dtype=float).reshape(-1, 2)
-        if len(points) < 3 or not np.isfinite(points).all() or rng.random() > .5:
+        if len(points) < 3 or not np.isfinite(points).all() or rng.random() > .2:
             continue
         points = points * (width, height)
         low, high = points.min(0), points.max(0)

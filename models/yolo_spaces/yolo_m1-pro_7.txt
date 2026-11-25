@@ -1,0 +1,10 @@
+YOLO segment (yolo11n-seg.pt)
+labels: polygon parking_space (occupancy ignored)
+device: Apple GPU (MPS)
+epochs: 3
+batch: 16
+imgsz: 640
+data: blackbox, cctv, cctv_image, huggingface, kaggle
+augmentation: degrees=5, perspective=0, scale=0.15, translate=0.03, mosaic=0
+file: yolo_m1-pro_7.pt
+source_run: /Users/taesoo/Projects/teamProject/parking-occupancy/models/_runs/yolo_m1-pro_7-2/weights/best.pt

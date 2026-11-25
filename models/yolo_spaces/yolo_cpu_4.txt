@@ -1,0 +1,10 @@
+YOLO segment (C:\Users\user1\Desktop\parking\models\yolo_spaces\yolo_rtx-4060-ti_5.pt)
+labels: polygon parking_space (occupancy ignored)
+device: CPU
+epochs: 5
+batch: 4
+imgsz: 640
+data: blackbox
+augmentation: degrees=5, perspective=0, scale=0.15, translate=0.03, mosaic=0
+file: yolo_cpu_4.pt
+source_run: C:\Users\user1\Desktop\parking\models\_runs\yolo_cpu_4\weights\best.pt
