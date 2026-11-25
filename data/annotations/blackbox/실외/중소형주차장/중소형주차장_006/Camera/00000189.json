@@ -1,0 +1,98 @@
+{
+  "filepath": "blackbox/실외/중소형주차장/중소형주차장_006/Camera/00000189.jpg",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "aihub_ps_1",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.108099,
+              0.795528
+            ],
+            [
+              0.0,
+              0.831676
+            ],
+            [
+              0.0,
+              0.882019
+            ],
+            [
+              0.132193,
+              0.902139
+            ],
+            [
+              0.292276,
+              0.891667
+            ],
+            [
+              0.435224,
+              0.879287
+            ],
+            [
+              0.485016,
+              0.881194
+            ],
+            [
+              0.524099,
+              0.833602
+            ],
+            [
+              0.261755,
+              0.804102
+            ],
+            [
+              0.150396,
+              0.794583
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_f194dd2b",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.5342761732669258,
+              0.8270749706613293
+            ],
+            [
+              0.5865791469030857,
+              0.7688328315206969
+            ],
+            [
+              0.21988357349792073,
+              0.7300047387602755
+            ],
+            [
+              0.12734754321856098,
+              0.7729199991796888
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      }
+    ]
+  }
+}
