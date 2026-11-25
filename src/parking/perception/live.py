@@ -18,17 +18,17 @@ MODELS_DIR = ROOT / "models"
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 VEHICLE_LABELS = set(VEHICLE_CLASSES.values())
 SPACE_LABELS = {"parking_space", "empty", "occupied", "vacant", "not occupied"}
-# OpenCV BGR
+# OpenCV BGR — 관제 점유: 빈=초록, 점유=빨강, 차량=시안
 COLORS = {
-    "parking_space": (255, 128, 0),  # 파랑
-    "empty": (255, 128, 0),
-    "occupied": (255, 128, 0),
-    "vacant": (255, 128, 0),
-    "unknown": (255, 128, 0),
-    "car": (0, 220, 0),  # 초록
-    "motorcycle": (0, 220, 0),
-    "bus": (0, 220, 0),
-    "truck": (0, 220, 0),
+    "parking_space": (255, 128, 0),  # 탐색 중(확정 전) 파랑
+    "empty": (80, 200, 80),
+    "vacant": (80, 200, 80),
+    "occupied": (60, 60, 230),
+    "unknown": (160, 160, 160),
+    "car": (220, 200, 0),
+    "motorcycle": (220, 200, 0),
+    "bus": (220, 200, 0),
+    "truck": (220, 200, 0),
 }
 VEHICLE_WEIGHTS = "yolov8n.pt"
 
@@ -108,40 +108,54 @@ class LiveDetector:
         with self._lock:
             return dict(self._inference)
 
-    def ensure(self) -> str:
-        if self._ready:
-            return self.label
+    def _ensure_vehicle_unlocked(self) -> None:
+        if self._vehicle_model is not None:
+            self._ready = True
+            return
         from ultralytics import YOLO
 
         self._vehicle_model = YOLO(VEHICLE_WEIGHTS)
-        if self.kind == "occupancy":
-            self._space_model = YOLO(self.path)
-        else:
-            self._space_model = None
         self._ready = True
-        return self.label
+
+    def ensure(self) -> str:
+        """관제 루프용: 차량 YOLO만 올린다."""
+        with self._lock:
+            self._ensure_vehicle_unlocked()
+            return self.label
+
+    def ensure_space_model(self) -> str:
+        """레이아웃 확정용: 주차칸 모델을 필요할 때만 올린다."""
+        from ultralytics import YOLO
+
+        with self._lock:
+            if self.kind != "occupancy":
+                raise RuntimeError("주차칸 모델을 선택한 뒤 레이아웃을 확정하세요")
+            if self._space_model is None:
+                self._space_model = YOLO(self.path)
+            return self.label
+
+    def unload_space_model(self) -> None:
+        """레이아웃 확정 후 주차칸 가중치를 내린다."""
+        with self._lock:
+            self._space_model = None
 
     def predict(self, frame_bgr: np.ndarray) -> list[dict]:
+        """관제 루프: 차량만 탐지한다. 슬롯은 고정 레이아웃을 쓴다."""
         with self._lock:
-            self.ensure()
-            boxes: list[dict] = []
-            if self._vehicle_model is not None:
-                boxes.extend(self._yolo_boxes(frame_bgr, self._vehicle_model, "coco"))
-            if self.kind == "occupancy" and self._space_model is not None:
-                size = int(self._inference.get("inference_imgsz", 640))
-                if size not in (640, 960, 1280):
-                    size = 640
-                boxes.extend(self._yolo_boxes(frame_bgr, self._space_model, "occupancy", imgsz=size))
-            return boxes
+            self._ensure_vehicle_unlocked()
+            if self._vehicle_model is None:
+                return []
+            return self._yolo_boxes(frame_bgr, self._vehicle_model, "coco")
 
     def predict_spaces(self, frame_bgr: np.ndarray) -> list[dict]:
         """선택된 주차칸 모델만 추론한다. 차량 모델은 돌리지 않는다."""
         with self._lock:
             if self.kind != "occupancy":
                 return []
-            self.ensure()
+            from ultralytics import YOLO
+
             if self._space_model is None:
-                return []
+                self._space_model = YOLO(self.path)
             size = int(self._inference.get("inference_imgsz", 640))
             if size not in (640, 960, 1280):
                 size = 640
@@ -215,6 +229,37 @@ def draw_detections(frame_bgr: np.ndarray, boxes: list[dict]) -> np.ndarray:
             cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
         text = f"{_display_label(label)} {box['conf']:.2f}"
         cv2.putText(canvas, text, (x1, max(16, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+    return canvas
+
+
+def draw_occupancy(
+    frame_bgr: np.ndarray,
+    space_states: list[dict],
+    vehicle_boxes: list[dict] | None = None,
+) -> np.ndarray:
+    """고정 슬롯 점유 색 + 차량 박스."""
+    canvas = frame_bgr.copy()
+    height, width = canvas.shape[:2]
+    for space in space_states:
+        state = str(space.get("state") or "unknown")
+        color = COLORS.get(state, COLORS["unknown"])
+        points = space.get("points") or []
+        if len(points) < 3:
+            continue
+        polygon = np.asarray(
+            [[float(x) * width, float(y) * height] for x, y in points],
+            dtype=np.int32,
+        )
+        overlay = canvas.copy()
+        cv2.fillPoly(overlay, [polygon], color)
+        cv2.addWeighted(overlay, 0.28, canvas, 0.72, 0, canvas)
+        outline = straightened_outline(polygon).astype(np.int32)
+        cv2.polylines(canvas, [outline], True, color, 2)
+        x1, y1 = int(polygon[:, 0].min()), int(polygon[:, 1].min())
+        label = f"{space.get('space_id', '')} {state}"
+        cv2.putText(canvas, label, (x1, max(16, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+    if vehicle_boxes:
+        canvas = draw_detections(canvas, vehicle_boxes)
     return canvas
 
 

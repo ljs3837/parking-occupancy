@@ -90,7 +90,7 @@ class AppShell(QMainWindow):
         nav_layout.addWidget(refresh_models)
         self.model_list = QListWidget()
         self.model_list.setMinimumHeight(140)
-        self.model_list.itemClicked.connect(self.select_model)
+        self.model_list.itemClicked.connect(lambda item: self.select_model(item, from_user=True))
         nav_layout.addWidget(self.model_list)
 
         infer_title = QLabel("추론 설정")
@@ -135,20 +135,22 @@ class AppShell(QMainWindow):
             self.model_list.setCurrentRow(chosen)
             self.select_model(self.model_list.item(chosen))
 
-    def select_model(self, item: QListWidgetItem):
+    def select_model(self, item: QListWidgetItem, *, from_user: bool = False):
         model = item.data(Qt.ItemDataRole.UserRole)
         DETECTOR.use(model["kind"], model["path"], model["label"])
         occupancy = model["kind"] == "occupancy"
         self.imgsz_box.setEnabled(occupancy)
         self._apply_inference_options()
+        if from_user:
+            self.monitor.on_model_selected(model)
         if occupancy:
             self.status.showMessage(
-                f"주차칸: {model['label']}(파랑) + 차량 YOLO(초록) 동시 인식"
+                f"선택: {model['label']} · 확정 전 이 모델로 주차칸 계속 탐색 / 확정 후 차량 YOLO 점유"
             )
         elif model["kind"] == "cnn":
             self.status.showMessage("CNN은 지원 예정. 지금은 차량 YOLO만 사용합니다.")
         else:
-            self.status.showMessage("차량 YOLO만 인식(초록)")
+            self.status.showMessage("관제: 차량 YOLO + 고정 레이아웃 점유")
 
     def _apply_inference_options(self, *_args):
         imgsz = self.imgsz_box.currentData()

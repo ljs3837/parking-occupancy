@@ -68,7 +68,12 @@ class Canvas(QWidget):
         img = QImage(str(path))
         if img.isNull():
             raise RuntimeError(f"이미지 로드 실패: {path}")
-        self.image = img
+        self.load_qimage(img, polygons)
+
+    def load_qimage(self, image: QImage, polygons: list[dict]):
+        if image.isNull():
+            raise RuntimeError("이미지 로드 실패")
+        self.image = image.copy()
         self.polygons = []
         for p in polygons:
             self.polygons.append(
