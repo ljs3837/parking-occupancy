@@ -10,14 +10,40 @@ from parking.common.device import device_label, gpu_file_slug, use_amp, yolo_dev
 from parking.training.prepare import MODELS_DIR, ROOT, build_yolo_dataset, list_data_folders, next_model_path
 
 OUT_DIR = MODELS_DIR / "yolo_spaces"
-# 주차 CCTV는 위아래가 있는 사선 시점이라, 매 사진마다 -15~15도만 돌린다.
-ROTATION_DEGREES = 15.0
+# 학습 증강 기본값 (기존 2차 테스트 실험값).
 TEST_ROUND_2_AUGMENTATION = {
     "degrees": 5.0,
     "perspective": 0.0,
     "scale": 0.15,
     "translate": 0.03,
     "mosaic": 0.0,
+}
+TEST_ROUND_2_HELP = {
+    "degrees": (
+        "기본 5. 학습 때 이미지를 ±N도 범위로 랜덤 회전합니다. "
+        "CCTV가 살짝 기운 경우·설치 각도 차이에 버티게 합니다. "
+        "너무 크면(예: 30+) 주차면이 비현실적으로 기울어져 오히려 방해가 될 수 있습니다."
+    ),
+    "perspective": (
+        "기본 0(끔). 원근 왜곡을 넣는 강도입니다. Ultralytics에선 보통 0~0.001 수준으로 씁니다. "
+        "값을 올리면 사다리꼴처럼 찌그러진 시점 변화를 흉내 내지만, "
+        "주차칸 폴리곤/박스 좌표가 민감해서 이 실험에선 기본으로 끕니다."
+    ),
+    "scale": (
+        "기본 0.15. 이미지를 최대 약 ±15% 확대·축소합니다. "
+        "카메라와 주차면 거리 차이, 줌처럼 칸이 커지거나 작아진 경우를 학습합니다. "
+        "너무 크면 칸이 잘리거나 너무 작아져 라벨과 어긋날 수 있습니다."
+    ),
+    "translate": (
+        "기본 0.03. 이미지 가로·세로 길이의 최대 3%만큼 랜덤으로 밀어 줍니다. "
+        "화면 안에서 주차면 위치가 조금 어긋난 상황(팬/설치 위치 차이)에 대응합니다. "
+        "값이 크면 칸이 화면 밖으로 많이 나가 학습이 불안정해질 수 있습니다."
+    ),
+    "mosaic": (
+        "기본 0(끔). 0~1 확률로 여러 장(보통 4장)을 한 장처럼 이어붙여 학습합니다. "
+        "객체 탐지 일반화에는 도움이 되지만, 주차면처럼 구도·원근이 중요한 데이터에선 "
+        "장면을 부자연스럽게 섞을 수 있어 2차 테스트 기본은 끕니다."
+    ),
 }
 # Ultralytics는 MPS/CPU에서 workers를 0으로 강제한다. 아래에서 콜백으로 다시 올린다.
 DATALOADER_WORKERS = 4
@@ -134,10 +160,10 @@ def train_yolo(
     epochs: int = 5,
     batch: int = 4,
     imgsz: int = 640,
-    model_name: str = "yolo11s-seg.pt",
+    model_name: str = "yolo11n-seg.pt",
     data_yaml: Path | None = None,
     folders: set[str] | None = None,
-    test_round_2: bool = False,
+    augmentation_overrides: dict[str, float] | None = None,
     log=print,
     should_stop=None,
 ) -> Path:
@@ -149,9 +175,9 @@ def train_yolo(
     local_weights = ROOT / model_name
     model = YOLO(str(local_weights) if local_weights.is_file() else model_name)
     task = model.task
-    augmentation = {"degrees": ROTATION_DEGREES}
-    if test_round_2:
-        augmentation.update(TEST_ROUND_2_AUGMENTATION)
+    augmentation = dict(TEST_ROUND_2_AUGMENTATION)
+    if augmentation_overrides:
+        augmentation.update(augmentation_overrides)
     if task == "pose":
         # Corner identities depend on image orientation.
         augmentation["fliplr"] = 0.0

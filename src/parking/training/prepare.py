@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import random
 import shutil
+import sys
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from pathlib import Path
 
 from parking.app.annotator.io import flat_points, iter_annotation_sources, polygons_from_annotation
@@ -14,6 +16,8 @@ from parking.training.occlusion import occlude_slots
 
 RUNS_DIR = ROOT / "outputs" / "train"
 MODELS_DIR = ROOT / "models"
+# Mac(MPS)은 HF 전체가 너무 커서 학습이 느림. 구도도 몇 개뿐이라 10%면 충분.
+MAC_HF_FRACTION = 0.10
 
 
 def next_model_path(directory: Path, stem: str) -> Path:
@@ -170,6 +174,42 @@ def _load_huggingface(skip_paths: set[str], log) -> list[dict]:
             items.append(item)
     log(f"[데이터] 허깅페이스 {len(items)}장")
     return items
+
+
+def _hf_shard_key(sample: dict) -> str:
+    rel = str(sample.get("rel") or sample.get("path") or "")
+    parts = Path(rel).parts
+    for part in parts:
+        if part.startswith("data_"):
+            return part
+    return parts[-2] if len(parts) >= 2 else "all"
+
+
+def _subsample_huggingface_for_mac(items: list[dict], log, fraction: float = MAC_HF_FRACTION) -> list[dict]:
+    """darwin에서만 HF를 fraction만큼 남긴다. Windows/Linux는 그대로."""
+    if sys.platform != "darwin" or fraction >= 1.0 or len(items) <= 1:
+        return items
+    target = max(1, int(round(len(items) * fraction)))
+    if target >= len(items):
+        return items
+    by_shard: dict[str, list[dict]] = defaultdict(list)
+    for item in items:
+        by_shard[_hf_shard_key(item)].append(item)
+    rng = random.Random(42)
+    kept: list[dict] = []
+    # 샤드별 비율 유지 후, 모자란 장은 전체에서 보충
+    for shard_items in by_shard.values():
+        n = max(1, int(round(len(shard_items) * fraction))) if shard_items else 0
+        n = min(n, len(shard_items))
+        kept.extend(rng.sample(shard_items, n))
+    if len(kept) > target:
+        kept = rng.sample(kept, target)
+    elif len(kept) < target:
+        chosen = {id(x) for x in kept}
+        rest = [x for x in items if id(x) not in chosen]
+        kept.extend(rng.sample(rest, min(target - len(kept), len(rest))))
+    log(f"[데이터] Mac: 허깅페이스 {len(items)}장 → {len(kept)}장 ({fraction:.0%} 샘플)")
+    return kept
 
 
 def _polygon_points(raw: str, width: float, height: float) -> list[list[float]]:
@@ -356,11 +396,13 @@ def collect_samples(log, folders: set[str] | None = None) -> list[dict]:
     huggingface = _load_huggingface(skip, log) if use_huggingface else []
     if not use_huggingface:
         log("[데이터] 허깅페이스 폴더 제외")
+    if allowed is not None:
+        huggingface = [item for item in huggingface if _in_selected_folder(str(item.get("rel") or ""), allowed)]
+    huggingface = _subsample_huggingface_for_mac(huggingface, log)
     kaggle = _load_kaggle_parking(skip | {str(item["path"]) for item in huggingface}, log) if use_kaggle else []
     if not use_kaggle:
         log("[데이터] Kaggle 폴더 제외")
     if allowed is not None:
-        huggingface = [item for item in huggingface if _in_selected_folder(str(item.get("rel") or ""), allowed)]
         kaggle = [item for item in kaggle if _in_selected_folder(str(item.get("rel") or ""), allowed)]
     total = len(local) + len(huggingface) + len(kaggle)
     chosen = "전체" if allowed is None else ", ".join(sorted(allowed))
@@ -435,7 +477,22 @@ def build_yolo_dataset(
         raise RuntimeError("학습용 이미지가 없습니다. 색인 또는 허깅페이스 PKLot를 확인하세요.")
 
     if data_dir.exists():
-        shutil.rmtree(data_dir)
+        # macOS에서 Finder/.DS_Store 때문에 rmtree가 ENOTEMPTY로 실패하는 경우가 있다.
+        for _ in range(3):
+            try:
+                shutil.rmtree(data_dir, ignore_errors=False)
+                break
+            except OSError as exc:
+                if getattr(exc, "errno", None) not in {66, 39}:  # ENOTEMPTY
+                    raise
+                for leftover in data_dir.rglob("*"):
+                    if leftover.is_file() or leftover.is_symlink():
+                        leftover.unlink(missing_ok=True)
+                shutil.rmtree(data_dir, ignore_errors=True)
+                if not data_dir.exists():
+                    break
+        if data_dir.exists():
+            raise RuntimeError(f"이전 학습 데이터셋 폴더를 비우지 못했습니다: {data_dir}")
     for split in ("train", "val"):
         (data_dir / "images" / split).mkdir(parents=True, exist_ok=True)
         (data_dir / "labels" / split).mkdir(parents=True, exist_ok=True)

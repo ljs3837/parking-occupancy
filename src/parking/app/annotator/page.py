@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, QSortFilterProxyModel, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QDir, QEvent, QSortFilterProxyModel, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFileSystemModel, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QAbstractItemView, QApplication, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy, QSplitter,
     QToolBar, QTreeView, QVBoxLayout, QWidget,
 )
@@ -90,6 +91,31 @@ class _DataTreeView(QTreeView):
                     event.accept()
                     return
         super().keyPressEvent(event)
+
+
+# 맥 한글 입력기는 글자 키를 Key_A로 넘기지 않는다. 하드웨어 키 코드로 받는다.
+_MAC_PLAIN_KEYS = {
+    0x00: "auto",
+    0x02: "draw",
+    0x09: "select",
+    0x0E: "status",
+    0x12: "empty",
+    0x13: "occupied",
+    0x14: "unknown",
+    0x15: "occlusion",
+    0x35: "cancel",
+}
+_QT_PLAIN_KEYS = {
+    Qt.Key.Key_A: "auto",
+    Qt.Key.Key_D: "draw",
+    Qt.Key.Key_V: "select",
+    Qt.Key.Key_E: "status",
+    Qt.Key.Key_1: "empty",
+    Qt.Key.Key_2: "occupied",
+    Qt.Key.Key_3: "unknown",
+    Qt.Key.Key_4: "occlusion",
+    Qt.Key.Key_Escape: "cancel",
+}
 
 
 class AnnotatorPage(QWidget):
@@ -214,10 +240,20 @@ class AnnotatorPage(QWidget):
         self._refresh_inspector()
 
     def _bind_shortcuts(self):
-        QShortcut(QKeySequence("A"), self, activated=self._auto_annotate)
-        QShortcut(QKeySequence("D"), self, activated=lambda: self.mode_box.setCurrentIndex(0))
-        QShortcut(QKeySequence("V"), self, activated=lambda: self.mode_box.setCurrentIndex(1))
-        QShortcut(QKeySequence("E"), self, activated=lambda: self.mode_box.setCurrentIndex(2))
+        if sys.platform == "darwin":
+            app = QApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
+        else:
+            QShortcut(QKeySequence("A"), self, activated=self._auto_annotate)
+            QShortcut(QKeySequence("D"), self, activated=lambda: self.mode_box.setCurrentIndex(0))
+            QShortcut(QKeySequence("V"), self, activated=lambda: self.mode_box.setCurrentIndex(1))
+            QShortcut(QKeySequence("E"), self, activated=lambda: self.mode_box.setCurrentIndex(2))
+            QShortcut(QKeySequence("1"), self, activated=lambda: self._use_status("empty"))
+            QShortcut(QKeySequence("2"), self, activated=lambda: self._use_status("occupied"))
+            QShortcut(QKeySequence("3"), self, activated=lambda: self._use_status("unknown"))
+            QShortcut(QKeySequence("4"), self, activated=lambda: self._use_status("occlusion"))
+            QShortcut(QKeySequence("Esc"), self, activated=self._cancel_draft)
         space = QShortcut(QKeySequence(Qt.Key.Key_Space), self.canvas)
         space.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         space.activated.connect(self.canvas.close_draft)
@@ -237,11 +273,50 @@ class AnnotatorPage(QWidget):
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self.save_current)
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._undo)
         QShortcut(QKeySequence("Ctrl+Y"), self, activated=self._redo)
-        QShortcut(QKeySequence("1"), self, activated=lambda: self._use_status("empty"))
-        QShortcut(QKeySequence("2"), self, activated=lambda: self._use_status("occupied"))
-        QShortcut(QKeySequence("3"), self, activated=lambda: self._use_status("unknown"))
-        QShortcut(QKeySequence("4"), self, activated=lambda: self._use_status("occlusion"))
-        QShortcut(QKeySequence("Esc"), self, activated=self._cancel_draft)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.KeyPress and self._mac_plain_shortcut(event):
+            return True
+        return super().eventFilter(watched, event)
+
+    def _mac_plain_shortcut(self, event) -> bool:
+        if not self.isVisible() or event.isAutoRepeat():
+            return False
+        mods = event.modifiers() & (
+            Qt.KeyboardModifier.ShiftModifier
+            | Qt.KeyboardModifier.ControlModifier
+            | Qt.KeyboardModifier.AltModifier
+            | Qt.KeyboardModifier.MetaModifier
+        )
+        if mods:
+            return False
+        focus = QApplication.focusWidget()
+        if isinstance(focus, QLineEdit):
+            return False
+        widget = focus
+        while widget is not None:
+            if isinstance(widget, QComboBox) and widget.view().isVisible():
+                return False
+            widget = widget.parentWidget()
+        action = _MAC_PLAIN_KEYS.get(event.nativeVirtualKey()) or _QT_PLAIN_KEYS.get(event.key())
+        if action is None:
+            return False
+        self._run_plain_shortcut(action)
+        return True
+
+    def _run_plain_shortcut(self, action: str):
+        if action == "auto":
+            self._auto_annotate()
+        elif action == "draw":
+            self.mode_box.setCurrentIndex(0)
+        elif action == "select":
+            self.mode_box.setCurrentIndex(1)
+        elif action == "status":
+            self.mode_box.setCurrentIndex(2)
+        elif action == "cancel":
+            self._cancel_draft()
+        else:
+            self._use_status(action)
 
     def _mode_changed(self, index: int):
         self.canvas.mode = {0: "draw", 1: "select"}.get(index, "toggle")
