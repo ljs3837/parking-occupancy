@@ -1,0 +1,10 @@
+YOLO detect (yolo11n.pt)
+labels: bbox parking_space (occupancy ignored)
+device: Apple GPU (MPS)
+epochs: 10
+batch: 16
+imgsz: 640
+data: cctv, cctv_image
+augmentation: degrees=5, perspective=0, scale=0.15, translate=0.03, mosaic=0
+file: yolo_m1-pro_14.pt
+source_run: /Users/taesoo/Projects/teamProject/parking-occupancy/models/_runs/yolo_m1-pro_14/weights/best.pt
