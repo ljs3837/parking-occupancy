@@ -94,6 +94,28 @@ class LiveCornerDecodingTests(unittest.TestCase):
         self.assertEqual(calls[-1]["conf"],0.5)
         self.assertEqual(calls[-1]["imgsz"],640)
 
+    def test_obb_corners_are_kept_as_tilted_polygon(self):
+        from types import SimpleNamespace
+        import torch
+        from parking.perception.live import LiveDetector
+        corners=torch.tensor([[[10.,30.],[70.,20.],[80.,75.],[20.,80.]]])
+
+        class _Obb:
+            def __len__(self):
+                return 1
+
+            xyxyxyxy = corners
+            conf = torch.tensor([.82])
+            cls = torch.tensor([0.])
+
+        obb=_Obb()
+        result=SimpleNamespace(boxes=None,obb=obb,names={0:"parking_space"},masks=None,keypoints=None)
+        model=SimpleNamespace(predict=lambda image, **kwargs: [result])
+        detected=LiveDetector()._yolo_boxes(np.zeros((100,160,3),np.uint8),model,"occupancy")
+        self.assertEqual(len(detected),1)
+        self.assertEqual(detected[0]["points"],corners[0].tolist())
+        self.assertEqual(detected[0]["label"],"parking_space")
+
 class EnclosingQuadrilateralTests(unittest.TestCase):
     def test_partial_mask_notch_can_be_regularized_without_right_angle_constraint(self):
         import cv2

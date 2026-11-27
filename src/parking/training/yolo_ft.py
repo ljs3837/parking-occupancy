@@ -231,7 +231,7 @@ def train_yolo(
     dest.with_suffix(".txt").write_text(
         f"YOLO {task} ({model_name})\n"
         f"labels: "
-        f"{'four keypoints' if task == 'pose' else 'bbox' if task == 'detect' else 'polygon'}"
+        f"{'four keypoints' if task == 'pose' else 'bbox' if task == 'detect' else 'oriented rectangle' if task == 'obb' else 'polygon'}"
         f" parking_space (occupancy ignored)\n"
         f"device: {device_label()}\n"
         f"epochs: {epochs}\nbatch: {batch}\nimgsz: {imgsz}\n"

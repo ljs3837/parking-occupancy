@@ -44,4 +44,27 @@ class MergeDataTests(unittest.TestCase):
                     prepare.build_yolo_dataset(lambda _:None,samples=samples,output_dir=root,cctv_repeat=1)
                 self.assertTrue(samples[0]['path'].is_file())
 
+    def test_obb_labels_keep_four_corners(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_root = root / "runs"
+            image = root / "image0.png"
+            cv2.imencode(".png", np.full((120, 160, 3), 40, np.uint8))[1].tofile(str(image))
+            points = [[0.1, 0.3], [0.7, 0.2], [0.8, 0.75], [0.2, 0.8]]
+            samples = [{
+                "rel": "cctv/jongsu/image0.png",
+                "path": image,
+                "polygons": [{"points": points, "label": "parking_space"}],
+            }]
+            with patch.object(prepare, "RUNS_DIR", run_root), patch.object(prepare, "occlude_slots", lambda image, polygons, seed=42: (image, 0)):
+                output = run_root / "obb"
+                prepare.build_yolo_dataset(lambda _: None, samples=samples, output_dir=output, cctv_repeat=1, task="obb")
+            label = next((output / "labels").rglob("*.txt"))
+            row = label.read_text(encoding="utf-8").strip().split()
+            self.assertEqual(row[0], "0")
+            self.assertEqual(len(row), 9)
+            coords = [round(float(value), 6) for value in row[1:]]
+            expected = [round(v, 6) for point in points for v in point]
+            self.assertEqual(coords, expected)
+
 if __name__=='__main__':unittest.main()

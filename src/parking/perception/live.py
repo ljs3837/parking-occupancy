@@ -191,9 +191,34 @@ class LiveDetector:
             device=yolo_device(),
         )[0]
         boxes = []
+        names = result.names or {}
+        obb = getattr(result, "obb", None)
+        if kind == "occupancy" and obb is not None and len(obb):
+            corners = obb.xyxyxyxy
+            if hasattr(corners, "cpu"):
+                corners = corners.cpu().numpy()
+            for index in range(len(obb)):
+                cls_id = int(obb.cls[index])
+                pts = corners[index]
+                x1, y1 = int(pts[:, 0].min()), int(pts[:, 1].min())
+                x2, y2 = int(pts[:, 0].max()), int(pts[:, 1].max())
+                name = str(names.get(cls_id, "")).lower()
+                if name in {"occupied", "empty", "vacant"}:
+                    label = name
+                else:
+                    label = "parking_space"
+                boxes.append(
+                    {
+                        "xyxy": (x1, y1, x2, y2),
+                        "points": pts.tolist(),
+                        "label": label,
+                        "conf": float(obb.conf[index]),
+                        "name": names.get(cls_id, label),
+                    }
+                )
+            return boxes
         if result.boxes is None:
             return boxes
-        names = result.names or {}
         mask_points = result.masks.xy if result.masks is not None else None
         corner_points = result.keypoints.xy if result.keypoints is not None else None
         for index, box in enumerate(result.boxes):

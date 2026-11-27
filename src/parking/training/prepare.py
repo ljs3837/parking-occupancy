@@ -467,13 +467,15 @@ def _detect_label(points: list) -> str | None:
 def build_yolo_dataset(
     log, *, samples=None, output_dir=None, cctv_repeat=CCTV_TRAIN_REPEAT, folders=None, task="segment"
 ) -> Path:
-    if task not in {"segment", "pose", "detect"}:
+    if task not in {"segment", "pose", "detect", "obb"}:
         raise ValueError(f"Unsupported parking-space task: {task}")
     samples = list(collect_samples(log, folders) if samples is None else samples)
     if task == "pose":
         default_dir = YOLO_DATA.with_name("yolo_parking_pose")
     elif task == "detect":
         default_dir = YOLO_DATA.with_name("yolo_parking_detect")
+    elif task == "obb":
+        default_dir = YOLO_DATA.with_name("yolo_parking_obb")
     else:
         default_dir = YOLO_DATA
     data_dir = (Path(output_dir) if output_dir is not None else default_dir).resolve()
@@ -531,6 +533,7 @@ def build_yolo_dataset(
                 if line:
                     lines.append(line)
                 continue
+            # segment는 폴리곤 그대로, obb는 같은 꼭짓점을 학습 중 기울어진 사각형으로 맞춘다.
             coords = []
             for x, y in poly["points"]:
                 coords.append(f"{min(1.0, max(0.0, x)):.6f}")
