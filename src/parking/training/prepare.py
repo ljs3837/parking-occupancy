@@ -41,12 +41,24 @@ YOLO_DATA = RUNS_DIR / "yolo_parking"
 
 OCC_POS = {"occupied"}
 OCC_NEG = {"empty", "not occupied"}
-# data/cctv 인간 색인은 학습에만 넣고 이 횟수만큼 반복한다. 검증에는 넣지 않는다.
+# 예전에는 CCTV를 학습에 반복해서 넣었다. 지금은 구도가 다른 CCTV를 검증으로만 쓴다.
 CCTV_TRAIN_REPEAT = 5
+# 같은 카메라가 수천 장 반복되는 MMU는 검증에 넣지 않는다.
+KAGGLE_EVAL_PREFIXES = (
+    "kaggle/parking-space-detection/",
+    "kaggle/parking-space-top-view/",
+)
 
 
 def _is_human_cctv(sample: dict) -> bool:
-    return str(sample.get("rel") or "").startswith("cctv/")
+    """data/cctv 색인. cctv_image 는 같은 구도가 반복되므로 여기 넣지 않는다."""
+    rel = str(sample.get("rel") or "")
+    return rel.startswith("cctv/") and not rel.startswith("cctv_image/")
+
+
+def _is_kaggle_eval(sample: dict) -> bool:
+    rel = str(sample.get("rel") or "")
+    return rel.startswith(KAGGLE_EVAL_PREFIXES)
 
 
 def _is_huggingface(sample: dict) -> bool:
@@ -54,26 +66,21 @@ def _is_huggingface(sample: dict) -> bool:
 
 
 def _split_rows(samples: list[dict], *, cctv_repeat: int = CCTV_TRAIN_REPEAT) -> tuple[list[tuple[str, dict]], int, int]:
-    """cctv와 허깅페이스는 전부 학습. 그 외 폴더는 20%를 검증으로 나눈다."""
-    if cctv_repeat < 1:
-        raise ValueError("cctv_repeat must be at least one")
-    cctv = [sample for sample in samples if _is_human_cctv(sample)]
-    huggingface = [sample for sample in samples if _is_huggingface(sample)]
-    others = [
-        sample
-        for sample in samples
-        if not _is_human_cctv(sample) and not _is_huggingface(sample)
-    ]
-    random.seed(42)
-    random.shuffle(others)
-    n_val = max(1, int(len(others) * 0.2)) if others else 0
+    """검증은 구도가 안 겹치는 CCTV 전부와 Kaggle 소형 세트만. 나머지는 학습만."""
+    del cctv_repeat
     rows: list[tuple[str, dict]] = []
-    for sample in cctv:
-        rows.extend(("train", sample) for _ in range(cctv_repeat))
-    rows.extend(("train", sample) for sample in huggingface)
-    for index, sample in enumerate(others):
-        rows.append(("val" if index < n_val else "train", sample))
-    return rows, len(cctv), n_val
+    n_cctv = 0
+    n_kaggle = 0
+    for sample in samples:
+        if _is_human_cctv(sample):
+            rows.append(("val", sample))
+            n_cctv += 1
+        elif _is_kaggle_eval(sample):
+            rows.append(("val", sample))
+            n_kaggle += 1
+        else:
+            rows.append(("train", sample))
+    return rows, n_cctv, n_kaggle
 
 
 def _norm_points(points) -> list[list[float]]:
@@ -497,7 +504,7 @@ def build_yolo_dataset(
         (data_dir / "images" / split).mkdir(parents=True, exist_ok=True)
         (data_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    rows, cctv_train, n_val = _split_rows(samples, cctv_repeat=cctv_repeat)
+    rows, n_cctv_val, n_kaggle_val = _split_rows(samples, cctv_repeat=cctv_repeat)
 
     n_img = 0
     n_occluded = 0
@@ -581,8 +588,8 @@ def build_yolo_dataset(
     )
     log(
         f"[YOLO 데이터] 주차칸 좌표 · 이미지 {n_img}장"
-        f" · CCTV 학습 원본 {cctv_train}장 × {cctv_repeat}"
-        f" · 허깅페이스는 학습만"
-        f" · 검증 원본 {n_val}장 → {data_dir}"
+        f" · 검증 CCTV {n_cctv_val}장 + Kaggle 소형 {n_kaggle_val}장"
+        f" · cctv_image·MMU·블랙박스·허깅페이스는 학습만"
+        f" → {data_dir}"
     )
     return yaml_path

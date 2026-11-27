@@ -67,6 +67,32 @@ class LiveCornerDecodingTests(unittest.TestCase):
         detected=LiveDetector()._yolo_boxes(np.zeros((100,100,3),np.uint8),model,"occupancy",imgsz=960)
         self.assertEqual(detected[0]["points"],points[0].tolist())
         self.assertEqual(calls[0]["imgsz"],960)
+        self.assertEqual(calls[0]["conf"],0.375)
+
+    def test_sidebar_confidence_reaches_vehicle_and_space_inference(self):
+        from types import SimpleNamespace
+        import torch
+        from parking.perception.live import LiveDetector
+        box=SimpleNamespace(cls=torch.tensor([2.]),xyxy=torch.tensor([[10.,10.,60.,70.]]),conf=torch.tensor([.8]))
+        result=SimpleNamespace(boxes=[box],names={2:"car"},masks=None,keypoints=None)
+        calls=[]
+        def predict(image,**kwargs):
+            calls.append(kwargs)
+            return [result]
+        model=SimpleNamespace(predict=predict)
+        frame=np.zeros((100,100,3),np.uint8)
+        detector=LiveDetector()
+        detector.set_inference(conf=0.5)
+        detector._vehicle_model=model
+        detector._ready=True
+        detector.predict(frame)
+        self.assertEqual(calls[-1]["conf"],0.5)
+        self.assertEqual(calls[-1]["imgsz"],640)
+        detector.kind="occupancy"
+        detector._space_model=model
+        detector.predict_spaces(frame)
+        self.assertEqual(calls[-1]["conf"],0.5)
+        self.assertEqual(calls[-1]["imgsz"],640)
 
 class EnclosingQuadrilateralTests(unittest.TestCase):
     def test_partial_mask_notch_can_be_regularized_without_right_angle_constraint(self):

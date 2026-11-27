@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QFormLayout,
     QHBoxLayout,
@@ -93,18 +93,17 @@ class AppShell(QMainWindow):
         self.model_list.itemClicked.connect(lambda item: self.select_model(item, from_user=True))
         nav_layout.addWidget(self.model_list)
 
-        infer_title = QLabel("추론 설정")
-        infer_title.setObjectName("brandSub")
-        nav_layout.addWidget(infer_title)
         infer_form = QFormLayout()
         infer_form.setContentsMargins(0, 0, 0, 0)
         infer_form.setSpacing(6)
-        self.imgsz_box = QComboBox()
-        for size in (640, 960, 1280):
-            self.imgsz_box.addItem(str(size), size)
-        self.imgsz_box.setCurrentIndex(0)
-        self.imgsz_box.currentIndexChanged.connect(self._apply_inference_options)
-        infer_form.addRow("imgsz", self.imgsz_box)
+        self.conf_box = QDoubleSpinBox()
+        self.conf_box.setRange(0.05, 0.95)
+        self.conf_box.setSingleStep(0.025)
+        self.conf_box.setDecimals(3)
+        self.conf_box.setValue(0.375)
+        self.conf_box.setToolTip("이 점수보다 낮은 검출은 화면에 나오지 않습니다. 모델을 다시 학습하지 않습니다.")
+        self.conf_box.valueChanged.connect(self._apply_inference_options)
+        infer_form.addRow("임계값", self.conf_box)
         nav_layout.addLayout(infer_form)
 
         layout.addWidget(nav)
@@ -139,8 +138,6 @@ class AppShell(QMainWindow):
         model = item.data(Qt.ItemDataRole.UserRole)
         DETECTOR.use(model["kind"], model["path"], model["label"])
         occupancy = model["kind"] == "occupancy"
-        self.imgsz_box.setEnabled(occupancy)
-        self._apply_inference_options()
         if from_user:
             self.monitor.on_model_selected(model)
         if occupancy:
@@ -153,8 +150,7 @@ class AppShell(QMainWindow):
             self.status.showMessage("관제: 차량 YOLO + 고정 레이아웃 점유")
 
     def _apply_inference_options(self, *_args):
-        imgsz = self.imgsz_box.currentData()
-        DETECTOR.set_inference(imgsz=int(imgsz) if imgsz is not None else 640)
+        DETECTOR.set_inference(conf=float(self.conf_box.value()))
 
     def _set_status(self, msg: str):
         self.status.showMessage(msg)

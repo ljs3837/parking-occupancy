@@ -119,7 +119,7 @@ def capture_layout_from_video(video_path: str) -> tuple[str, Path, int]:
     finally:
         DETECTOR.unload_space_model()
     if not spaces:
-        raise RuntimeError("주차칸을 찾지 못했습니다. 모델·imgsz를 확인하세요")
+        raise RuntimeError("주차칸을 찾지 못했습니다. 모델·임계값을 확인하세요")
     try:
         rel = Path(video_path).resolve().relative_to(OBSERVE_DIR.resolve()).as_posix()
     except ValueError:
