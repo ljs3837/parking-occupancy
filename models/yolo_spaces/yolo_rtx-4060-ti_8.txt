@@ -1,0 +1,10 @@
+YOLO detect (yolo11n.pt)
+labels: bbox parking_space (occupancy ignored)
+device: CUDA:0 (NVIDIA GeForce RTX 4060 Ti)
+epochs: 20
+batch: 8
+imgsz: 640
+data: blackbox, cctv, cctv_image, huggingface, kaggle
+augmentation: degrees=5, perspective=0, scale=0.15, translate=0.03, mosaic=0
+file: yolo_rtx-4060-ti_8.pt
+source_run: C:\Users\ljs38\OneDrive\바탕 화면\parking-occupancy\models\_runs\yolo_rtx-4060-ti_8\weights\best.pt
