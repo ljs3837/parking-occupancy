@@ -1,0 +1,266 @@
+{
+  "filepath": "rois_gopro/cy/GOPR6674.JPG",
+  "tags": [],
+  "_media_type": "image",
+  "parking_spaces": {
+    "_cls": "Polylines",
+    "polylines": [
+      {
+        "_cls": "Polyline",
+        "id": "p_18e6d581",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.5087535014005603,
+              0.7246732026143791
+            ],
+            [
+              0.5995710784313726,
+              0.45769140989729223
+            ],
+            [
+              0.6991421568627452,
+              0.49562324929971985
+            ],
+            [
+              0.6422443977591037,
+              0.7961601307189543
+            ]
+          ]
+        ],
+        "index": 1,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 1
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_a6116bd5",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.6422443977591037,
+              0.7961601307189543
+            ],
+            [
+              0.7658876050420168,
+              0.8515989729225024
+            ],
+            [
+              0.7954306722689076,
+              0.5408496732026143
+            ],
+            [
+              0.6991421568627452,
+              0.49562324929971985
+            ]
+          ]
+        ],
+        "index": 2,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 2
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_f7dfc1ed",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.7954306722689076,
+              0.5408496732026143
+            ],
+            [
+              0.8829656862745099,
+              0.5802404295051353
+            ],
+            [
+              0.8698354341736696,
+              0.8822362278244632
+            ],
+            [
+              0.7658876050420168,
+              0.8515989729225024
+            ]
+          ]
+        ],
+        "index": 3,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 3
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_4f6778f0",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.3905812324929972,
+              0.6604808590102708
+            ],
+            [
+              0.5032825630252101,
+              0.41392390289449116
+            ],
+            [
+              0.5995710784313726,
+              0.45769140989729223
+            ],
+            [
+              0.5087535014005603,
+              0.7246732026143791
+            ]
+          ]
+        ],
+        "index": 4,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 4
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_afc8f830",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.29429271708683474,
+              0.5962885154061625
+            ],
+            [
+              0.42340686274509803,
+              0.3730742296918767
+            ],
+            [
+              0.5032825630252101,
+              0.41392390289449116
+            ],
+            [
+              0.3905812324929972,
+              0.6604808590102708
+            ]
+          ]
+        ],
+        "index": 5,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 5
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_7ca048e5",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.22098214285714282,
+              0.5423085901027077
+            ],
+            [
+              0.3479079131652661,
+              0.346813725490196
+            ],
+            [
+              0.42340686274509803,
+              0.3730742296918767
+            ],
+            [
+              0.29429271708683474,
+              0.5962885154061625
+            ]
+          ]
+        ],
+        "index": 6,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 6
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_20dc1809",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.16736694677871147,
+              0.5
+            ],
+            [
+              0.29210434173669464,
+              0.3117997198879552
+            ],
+            [
+              0.3479079131652661,
+              0.346813725490196
+            ],
+            [
+              0.22098214285714282,
+              0.5423085901027077
+            ]
+          ]
+        ],
+        "index": 7,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 7
+      },
+      {
+        "_cls": "Polyline",
+        "id": "p_31e1549c",
+        "attributes": {},
+        "tags": [],
+        "label": "parking_space",
+        "points": [
+          [
+            [
+              0.12797619047619047,
+              0.46498599439775906
+            ],
+            [
+              0.2472426470588235,
+              0.3001283846872082
+            ],
+            [
+              0.29210434173669464,
+              0.3117997198879552
+            ],
+            [
+              0.16736694677871147,
+              0.5
+            ]
+          ]
+        ],
+        "index": 8,
+        "closed": true,
+        "filled": true,
+        "occupancy_status": "not occupied",
+        "space_id": 8
+      }
+    ]
+  }
+}
