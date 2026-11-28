@@ -22,14 +22,16 @@ from PyQt6.QtWidgets import (
 from parking.training.prepare import MODELS_DIR, list_data_folders
 from parking.training.yolo_ft import TEST_ROUND_2_AUGMENTATION, TEST_ROUND_2_HELP
 
-# 주차칸 탐지/분할/꼭짓점 파인튜닝에 쓰는 Ultralytics 가중치.
+# 주차칸 탐지/분할/기울어진 사각형/꼭짓점 파인튜닝에 쓰는 Ultralytics 가중치.
 YOLO_MODELS = (
     ("YOLOv8n", "yolov8n.pt"),
+    ("YOLOv8n-obb", "yolov8n-obb.pt"),
     ("YOLOv8n-seg", "yolov8n-seg.pt"),
     ("YOLOv8s-seg", "yolov8s-seg.pt"),
     ("YOLOv8m-seg", "yolov8m-seg.pt"),
     ("YOLOv8l-seg", "yolov8l-seg.pt"),
     ("YOLO11n", "yolo11n.pt"),
+    ("YOLO11n-obb", "yolo11n-obb.pt"),
     ("YOLO11n-seg", "yolo11n-seg.pt"),
     ("YOLO11s-seg", "yolo11s-seg.pt"),
     ("YOLO11m-seg", "yolo11m-seg.pt"),

@@ -85,8 +85,8 @@ class LiveDetector:
         self.path = VEHICLE_WEIGHTS
         self.label = "YOLOv8n 차량만"
         self._lock = threading.Lock()
-        # 관제 UI에서 고른 추론 옵션. 모델 옆 JSON이 아니라 여기가 기준이다.
-        self._inference = {"inference_imgsz": 640}
+        # 관제 좌측에서 고른 표시 임계값. 학습 설정이 아니라 추론 필터다.
+        self._inference = {"conf": 0.375}
 
     def use(self, kind: str, path: str, label: str):
         with self._lock:
@@ -97,12 +97,11 @@ class LiveDetector:
             self._vehicle_model = None
             self._ready = False
 
-    def set_inference(self, *, imgsz: int | None = None) -> None:
-        """관제 사이드바에서 입력 크기를 바로 반영한다."""
+    def set_inference(self, *, conf: float | None = None) -> None:
+        """관제 좌측 임계값을 다음 추론부터 바로 반영한다."""
         with self._lock:
-            if imgsz is not None:
-                size = int(imgsz)
-                self._inference["inference_imgsz"] = size if size in (640, 960, 1280) else 640
+            if conf is not None:
+                self._inference["conf"] = min(0.99, max(0.01, float(conf)))
 
     def inference_options(self) -> dict:
         with self._lock:
@@ -145,7 +144,12 @@ class LiveDetector:
             self._ensure_vehicle_unlocked()
             if self._vehicle_model is None:
                 return []
-            return self._yolo_boxes(frame_bgr, self._vehicle_model, "coco")
+            return self._yolo_boxes(
+                frame_bgr,
+                self._vehicle_model,
+                "coco",
+                conf=float(self._inference.get("conf", 0.375)),
+            )
 
     def predict_spaces(self, frame_bgr: np.ndarray) -> list[dict]:
         """선택된 주차칸 모델만 추론한다. 차량 모델은 돌리지 않는다."""
@@ -156,27 +160,65 @@ class LiveDetector:
 
             if self._space_model is None:
                 self._space_model = YOLO(self.path)
-            size = int(self._inference.get("inference_imgsz", 640))
-            if size not in (640, 960, 1280):
-                size = 640
-            return self._yolo_boxes(frame_bgr, self._space_model, "occupancy", imgsz=size)
+            return self._yolo_boxes(
+                frame_bgr,
+                self._space_model,
+                "occupancy",
+                imgsz=640,
+                conf=float(self._inference.get("conf", 0.375)),
+            )
 
     def predict_space_candidates(self, frame_bgr, model, *, imgsz=640, tiled=False):
         predict = lambda image: self._yolo_boxes(image, model, "occupancy", imgsz=imgsz)
         return tiled_candidates(frame_bgr, predict) if tiled else predict(frame_bgr)
 
-    def _yolo_boxes(self, frame_bgr: np.ndarray, model, kind: str, *, imgsz=640) -> list[dict]:
+    def _yolo_boxes(
+        self,
+        frame_bgr: np.ndarray,
+        model,
+        kind: str,
+        *,
+        imgsz=640,
+        conf: float | None = None,
+    ) -> list[dict]:
+        if conf is None:
+            conf = 0.375 if kind == "occupancy" else 0.35
         result = model.predict(
             frame_bgr,
             verbose=False,
             imgsz=imgsz,
-            conf=0.375 if kind == "occupancy" else 0.35,
+            conf=float(conf),
             device=yolo_device(),
         )[0]
         boxes = []
+        names = result.names or {}
+        obb = getattr(result, "obb", None)
+        if kind == "occupancy" and obb is not None and len(obb):
+            corners = obb.xyxyxyxy
+            if hasattr(corners, "cpu"):
+                corners = corners.cpu().numpy()
+            for index in range(len(obb)):
+                cls_id = int(obb.cls[index])
+                pts = corners[index]
+                x1, y1 = int(pts[:, 0].min()), int(pts[:, 1].min())
+                x2, y2 = int(pts[:, 0].max()), int(pts[:, 1].max())
+                name = str(names.get(cls_id, "")).lower()
+                if name in {"occupied", "empty", "vacant"}:
+                    label = name
+                else:
+                    label = "parking_space"
+                boxes.append(
+                    {
+                        "xyxy": (x1, y1, x2, y2),
+                        "points": pts.tolist(),
+                        "label": label,
+                        "conf": float(obb.conf[index]),
+                        "name": names.get(cls_id, label),
+                    }
+                )
+            return boxes
         if result.boxes is None:
             return boxes
-        names = result.names or {}
         mask_points = result.masks.xy if result.masks is not None else None
         corner_points = result.keypoints.xy if result.keypoints is not None else None
         for index, box in enumerate(result.boxes):

@@ -45,7 +45,7 @@ QComboBox QAbstractItemView {
   selection-color: #e7eef7;
   border: 1px solid #2a3545;
 }
-QLineEdit, QComboBox, QListWidget, QTreeView, QSpinBox, QTextEdit {
+QLineEdit, QComboBox, QListWidget, QTreeView, QSpinBox, QDoubleSpinBox, QTextEdit {
   background: #141a22;
   border: 1px solid #2a3545;
   border-radius: 8px;
